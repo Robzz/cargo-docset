@@ -10,11 +10,14 @@ use cargo::{
     },
     ops::{doc, CompileOptions, DocOptions, Packages}
 };
+use rusqlite::types::ToSql;
+use rusqlite::{params, Connection, Result};
 
 use std::{
     borrow::{Borrow, ToOwned},
     ffi::OsStr,
-    fs::read_dir,
+    io::Write,
+    fs::{copy, create_dir_all, File, read_dir, remove_dir_all},
     path::{Path, PathBuf}
 };
 
@@ -36,11 +39,13 @@ impl Default for GenerateConfig {
     }
 }
 
-fn parse_docset_entry<P: AsRef<Path> + std::fmt::Debug>(module_path: &Option<&str>, file_path: P) -> Option<DocsetEntry> {
+fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(module_path: &Option<&str>, rustdoc_root_dir: P1, file_path: P2) -> Option<DocsetEntry> {
     if file_path.as_ref().extension() == Some(OsStr::new("html")) {
         let file_name = file_path.as_ref().file_name().unwrap().to_string_lossy();
         println!("Parsing file {:?}::{}", module_path, file_name);
         let parts = file_name.split(".").collect::<Vec<_>>();
+
+        let file_db_path = file_path.as_ref().strip_prefix(&rustdoc_root_dir).unwrap().to_owned();
         match parts.len() {
             2 => {
                 match parts[0] {
@@ -48,11 +53,11 @@ fn parse_docset_entry<P: AsRef<Path> + std::fmt::Debug>(module_path: &Option<&st
                         if let Some(mod_path) = module_path {
                             if mod_path.contains(':') {
                                 // Module entry
-                                Some(DocsetEntry::new(format!("{}::{}", mod_path, parts[0]), EntryType::Module, file_path.as_ref().to_owned()))
+                                Some(DocsetEntry::new(format!("{}::{}", mod_path, parts[0]), EntryType::Module, file_db_path))
                             }
                             else {
                                 // Package entry
-                                Some(DocsetEntry::new(mod_path.to_string(), EntryType::Package, file_path.as_ref().to_owned()))
+                                Some(DocsetEntry::new(mod_path.to_string(), EntryType::Package, file_db_path))
                             }
                         }
                         else { None }
@@ -70,12 +75,12 @@ fn parse_docset_entry<P: AsRef<Path> + std::fmt::Debug>(module_path: &Option<&st
 
 const ROOT_SKIP_DIRS: &[&'static str] = &["src", "implementors"];
 
-fn recursive_walk<P: AsRef<Path> + std::fmt::Debug>(root_dir: P, module_path: Option<&str>) -> Vec<DocsetEntry> {
-    let dir = read_dir(root_dir.as_ref()).unwrap();
+fn recursive_walk(root_dir: &Path, cur_dir: &Path, module_path: Option<&str>) -> Vec<DocsetEntry> {
+    let dir = read_dir(cur_dir).unwrap();
     let mut entries = vec![];
     let mut subdir_entries = vec![];
 
-    println!("Scanning directory {:?}, (module path: {:?})", root_dir, module_path);
+    println!("Scanning dir {}", cur_dir.to_str().unwrap());
 
     for dir_entry in dir {
         let dir_entry = dir_entry.unwrap();
@@ -86,11 +91,11 @@ fn recursive_walk<P: AsRef<Path> + std::fmt::Debug>(root_dir: P, module_path: Op
             // Ignore some of the root directories which are of no interest to us
             if !(module_path.is_none() && ROOT_SKIP_DIRS.contains(&dir_name.as_str())) {
                 subdir_module_path.push_str(&dir_name);
-                subdir_entries.push(recursive_walk(dir_entry.path(), Some(&subdir_module_path)));
+                subdir_entries.push(recursive_walk(&root_dir, &dir_entry.path(), Some(&subdir_module_path)));
             }
         }
         else {
-            if let Some(entry) = parse_docset_entry(&module_path, &dir_entry.path()) {
+            if let Some(entry) = parse_docset_entry(&module_path, &root_dir, &dir_entry.path()) {
                 entries.push(entry);
             }
         }
@@ -99,6 +104,70 @@ fn recursive_walk<P: AsRef<Path> + std::fmt::Debug>(root_dir: P, module_path: Op
         entries.extend(v);
     }
     entries
+}
+
+fn generate_sqlite_index<P: AsRef<Path>>(docset_dir: P, entries: Vec<DocsetEntry>) {
+    let mut conn_path = docset_dir.as_ref().to_owned();
+    conn_path.push("Contents");
+    conn_path.push("Resources");
+    conn_path.push("docSet.dsidx");
+    let mut conn = Connection::open(&conn_path).unwrap();
+    conn.execute(
+        "CREATE TABLE searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT);
+        CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path);
+        )",
+        params![],
+    ).unwrap();
+    let mut stmt = conn.prepare("INSERT INTO searchIndex (name, type, path) VALUES (?1, ?2, ?3)").unwrap();
+    for entry in entries {
+        stmt.execute(&[entry.name, entry.ty.to_string(), entry.path.to_str().unwrap().to_owned()],
+        ).unwrap();
+    }
+}
+
+fn copy_dir_recursive<Ps: AsRef<Path>, Pd: AsRef<Path>>(src: Ps, dst: Pd) {
+    create_dir_all(&dst).unwrap();
+    for entry in read_dir(&src).unwrap() {
+        let entry = entry.unwrap().path();
+        if entry.is_dir() {
+            let mut dst_dir = dst.as_ref().to_owned();
+            dst_dir.push(entry.strip_prefix(&src).unwrap());
+            copy_dir_recursive(entry, dst_dir);
+        }
+        else if entry.is_file() {
+            let mut dst_file = dst.as_ref().to_owned();
+            dst_file.push(entry.file_name().unwrap());
+            copy(entry, dst_file).unwrap();
+        }
+    }
+}
+
+fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str) {
+    let mut info_plist_path = docset_root_dir.as_ref().to_owned();
+    info_plist_path.push("Contents");
+    info_plist_path.push("Info.plist");
+
+    let mut info_file = File::create(info_plist_path).unwrap();
+    let format_str = 
+    write!(info_file,
+"\
+<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+    <key>CFBundleIdentifier</key>
+        <string>{}</string>
+    <key>CFBundleName</key>
+        <string>{}</string>
+    <key>dashIndexFilePath</key>
+        <string>{}/index.html</string>
+    <key>DocSetPlatformFamily</key>
+        <string>{}</string>
+    <key>isDashDocset</key>
+        <true/>
+</dict>
+</plist>",
+         package_name, package_name, package_name, package_name).unwrap();
 }
 
 pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateConfig) {
@@ -116,19 +185,37 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
         Package::Current => { compile_opts.spec = Packages::Default; cur_package.unwrap().name().as_str().to_owned() }
         Package::Single(name) => { compile_opts.spec = Packages::Packages(vec![name.clone()]); name }
     };
+    let mut docset_root_dir = PathBuf::new();
+    docset_root_dir.push(workspace.root());
+    docset_root_dir.push("target");
+    let mut rustdoc_root_dir = docset_root_dir.clone();
+    rustdoc_root_dir.push("doc");
+    docset_root_dir.push("docset");
+    docset_root_dir.push(format!("{}.docset", root_package_name));
 
     let doc_cfg = DocOptions { open_result: false, compile_opts };
     doc(&workspace, &doc_cfg).unwrap();
     println!("Generated rustdoc for package {}", root_package_name);
 
     // Step 2: iterate over all the html files in the doc directory and parse the filenames
-    let mut root_doc_dir = PathBuf::new();
-    root_doc_dir.push(workspace.root());
-    root_doc_dir.push("target");
-    root_doc_dir.push("doc");
-    let entries = recursive_walk(root_doc_dir, None);
+    let entries = recursive_walk(&rustdoc_root_dir, &rustdoc_root_dir, None);
 
     println!("Got the following entries: {:?}", entries);
 
     // Step 3: generate the SQLite database
+    // At this point, we need to start writing into the output docset directory, so create the
+    // hirerarchy, and clean it first if it already exists.
+    remove_dir_all(&docset_root_dir).unwrap();
+    let mut docset_hierarchy = docset_root_dir.clone();
+    docset_hierarchy.push("Contents");
+    docset_hierarchy.push("Resources");
+    create_dir_all(&docset_hierarchy).unwrap();
+    generate_sqlite_index(&docset_root_dir, entries);
+
+    // Step 4: Copy the rustdoc to the docset directory
+    docset_hierarchy.push("Documents");
+    copy_dir_recursive(&rustdoc_root_dir, &docset_hierarchy);
+
+    // Step 5: add the required metadata
+    write_metadata(&docset_root_dir, &root_package_name);
 }
