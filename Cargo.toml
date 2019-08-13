@@ -1,0 +1,10 @@
+[package]
+name = "cargo-docset"
+version = "0.1.0"
+authors = ["R.Chavignat <r.chavignat@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+cargo = "0.37"
+clap = "2.33"
+snafu = "0.4"
