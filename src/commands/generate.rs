@@ -10,11 +10,10 @@ use cargo::{
     },
     ops::{doc, CompileOptions, DocOptions, Packages}
 };
-use rusqlite::types::ToSql;
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, Connection};
 
 use std::{
-    borrow::{Borrow, ToOwned},
+    borrow::ToOwned,
     ffi::OsStr,
     io::Write,
     fs::{copy, create_dir_all, File, read_dir, remove_dir_all},
@@ -65,6 +64,32 @@ fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(module_path: &Option<&st
                     _ => None
                 }
             }
+            3 => {
+                match parts[0] {
+                    "const" => {
+                        Some(DocsetEntry::new(format!("{}::{}", module_path.unwrap().to_string(), parts[1]), EntryType::Constant, file_db_path))
+                    }
+                    "enum" => {
+                        Some(DocsetEntry::new(format!("{}::{}", module_path.unwrap().to_string(), parts[1]), EntryType::Enum, file_db_path))
+                    }
+                    "fn" => {
+                        Some(DocsetEntry::new(format!("{}::{}", module_path.unwrap().to_string(), parts[1]), EntryType::Function, file_db_path))
+                    }
+                    "macro" => {
+                        Some(DocsetEntry::new(format!("{}::{}", module_path.unwrap().to_string(), parts[1]), EntryType::Macro, file_db_path))
+                    }
+                    "trait" => {
+                        Some(DocsetEntry::new(format!("{}::{}", module_path.unwrap().to_string(), parts[1]), EntryType::Trait, file_db_path))
+                    }
+                    "struct" => {
+                        Some(DocsetEntry::new(format!("{}::{}", module_path.unwrap().to_string(), parts[1]), EntryType::Struct, file_db_path))
+                    }
+                    "type" => {
+                        Some(DocsetEntry::new(format!("{}::{}", module_path.unwrap().to_string(), parts[1]), EntryType::Type, file_db_path))
+                    }
+                    _ => None
+                }
+            }
             _ => None
         }
     }
@@ -111,7 +136,7 @@ fn generate_sqlite_index<P: AsRef<Path>>(docset_dir: P, entries: Vec<DocsetEntry
     conn_path.push("Contents");
     conn_path.push("Resources");
     conn_path.push("docSet.dsidx");
-    let mut conn = Connection::open(&conn_path).unwrap();
+    let conn = Connection::open(&conn_path).unwrap();
     conn.execute(
         "CREATE TABLE searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT);
         CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path);
@@ -148,7 +173,6 @@ fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str) {
     info_plist_path.push("Info.plist");
 
     let mut info_file = File::create(info_plist_path).unwrap();
-    let format_str = 
     write!(info_file,
 "\
 <?xml version=\"1.0\" encoding=\"UTF-8\"?>
