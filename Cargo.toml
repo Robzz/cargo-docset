@@ -7,4 +7,5 @@ edition = "2018"
 [dependencies]
 cargo = "0.37"
 clap = "2.33"
+derive_more = "0.15"
 snafu = "0.4"
