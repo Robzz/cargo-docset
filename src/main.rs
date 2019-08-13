@@ -1,4 +1,4 @@
-use clap::{Arg, App, SubCommand};
+use clap::{App, Arg, SubCommand};
 use cargo::{
     Config as CargoCfg,
     core::Workspace,
@@ -16,61 +16,44 @@ use common::Package;
 use commands::generate::{generate, GenerateConfig};
 use crate::error::*;
 
-// TODO: generate the docs in a different target directory that we can claim as our own
-
 fn main() -> Result<()> {
     let matches =
         App::new("cargo-docset")
         .version("0.1")
         .author("Robin Chavignat")
         .about("Generates a Zeal/Dash docset from a crate documentation.")
-        .arg(Arg::with_name("config")
-            .help("Sets a custom config file")
-            .takes_value(true))
-        .arg(Arg::with_name("v")
-           .short("v")
-           .multiple(true)
-           .help("Sets the level of verbosity"))
+        .bin_name("cargo")
         .subcommand(
-            SubCommand::with_name("generate")
-            .about("Generate a Dash/Zeal compatible docset for the specified package.")
+            SubCommand::with_name("docset")
             .arg(
-                Arg::with_name("package")
-                .short("p")
-                .takes_value(true)
-                .help("Package to document, as understood by `cargo doc`.")
-            )
-            .arg(
-                Arg::with_name("dependencies")
-                .short("d")
-                .takes_value(false)
-                .help("Enable documenting the package dependencies.")
-        ))
+                Arg::from_usage(" -p, --package <SPEC>... 'Package(s) to document'")
+                .required(false))
+            .args_from_usage(
+                "--all                      'Document all packages in the workspace'
+                --no-deps                   'Dont build documentation for dependencies'
+                --document-private-items    'Document private items'
+                "))
         .get_matches();
+    let sub_matches = matches.subcommand_matches("docset").unwrap();
 
     let mut cargo_cfg = CargoCfg::default().context(Cargo)?;
     cargo_cfg.configure(0, Some(false), &None, false, false, false, &None, &[]).context(Cargo)?;
 
-    match matches.subcommand_name() {
-        Some("generate") | None => {
-            let cfg = match matches.subcommand_matches("generate") {
-                Some(sub_matches) => {
-                    let package = sub_matches.value_of("package").map(|p| Package::Single(p.to_owned())).unwrap_or(Package::Current);
-                    let dependencies = sub_matches.is_present("dependencies");
-                    GenerateConfig::new(package, dependencies)
-                },
-                None => GenerateConfig::default()
-            };
-            let cur_dir = current_dir().context(Io)?;
-            let root_manifest = find_root_manifest_for_wd(&cur_dir).context(Cargo)?;
-            let workspace = Workspace::new(&root_manifest, &cargo_cfg).context(Cargo)?;
-
-            generate(&cargo_cfg, &workspace, cfg)?;
-        }
-        _ => {
-            println!("Unknown command.")
-        }
+    let mut cfg = GenerateConfig::default();
+    cfg.no_dependencies = sub_matches.is_present("no-deps");
+    cfg.package = if sub_matches.is_present("all") {
+        Package::All
     }
+    else if let Some(package) = sub_matches.value_of("package") {
+        Package::Single(package.to_owned())
+    }
+    else { Package::Current };
+
+    let cur_dir = current_dir().context(Io)?;
+    let root_manifest = find_root_manifest_for_wd(&cur_dir).context(Cargo)?;
+    let workspace = Workspace::new(&root_manifest, &cargo_cfg).context(Cargo)?;
+
+    generate(&cargo_cfg, &workspace, cfg)?;
 
     Ok(())
 }

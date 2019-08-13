@@ -24,21 +24,15 @@ use std::{
     path::{Path, PathBuf}
 };
 
+#[derive(Debug)]
 pub struct GenerateConfig {
     pub package: Package,
-    pub dependencies: bool
-}
-
-impl GenerateConfig {
-    /// Create a new GenerateConfig.
-    pub fn new(package: Package, dependencies: bool) -> GenerateConfig {
-        GenerateConfig { package, dependencies }
-    }
+    pub no_dependencies: bool
 }
 
 impl Default for GenerateConfig {
     fn default() -> GenerateConfig {
-        GenerateConfig { package: Package::Current, dependencies: false }
+        GenerateConfig { package: Package::Current, no_dependencies: false }
     }
 }
 
@@ -108,8 +102,6 @@ fn recursive_walk(root_dir: &Path, cur_dir: &Path, module_path: Option<&str>) ->
     let mut entries = vec![];
     let mut subdir_entries = vec![];
 
-    println!("Scanning dir {}", cur_dir.to_str().unwrap());
-
     for dir_entry in dir {
         let dir_entry = dir_entry.unwrap();
         if dir_entry.file_type().unwrap().is_dir() {
@@ -139,17 +131,21 @@ fn generate_sqlite_index<P: AsRef<Path>>(docset_dir: P, entries: Vec<DocsetEntry
     conn_path.push("Contents");
     conn_path.push("Resources");
     conn_path.push("docSet.dsidx");
-    let conn = Connection::open(&conn_path).context(Sqlite)?;
+    let mut conn = Connection::open(&conn_path).context(Sqlite)?;
     conn.execute(
         "CREATE TABLE searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT);
         CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path);
         )",
         params![],
     ).context(Sqlite)?;
-    let mut stmt = conn.prepare("INSERT INTO searchIndex (name, type, path) VALUES (?1, ?2, ?3)").context(Sqlite)?;
-    for entry in entries {
-        stmt.execute(&[entry.name, entry.ty.to_string(), entry.path.to_str().unwrap().to_owned()]).context(Sqlite)?;
+    let transaction = conn.transaction().context(Sqlite)?;
+    {
+        let mut stmt = transaction.prepare("INSERT INTO searchIndex (name, type, path) VALUES (?1, ?2, ?3)").context(Sqlite)?;
+        for entry in entries {
+            stmt.execute(&[entry.name, entry.ty.to_string(), entry.path.to_str().unwrap().to_owned()]).context(Sqlite)?;
+        }
     }
+    transaction.commit().context(Sqlite)?;
     Ok(())
 }
 
@@ -178,23 +174,23 @@ fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str) -> Res
 
     let mut info_file = File::create(info_plist_path).context(Io)?;
     write!(info_file,
-"\
-<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
-<plist version=\"1.0\">
-<dict>
-    <key>CFBundleIdentifier</key>
-        <string>{}</string>
-    <key>CFBundleName</key>
-        <string>{}</string>
-    <key>dashIndexFilePath</key>
-        <string>{}/index.html</string>
-    <key>DocSetPlatformFamily</key>
-        <string>{}</string>
-    <key>isDashDocset</key>
-        <true/>
-</dict>
-</plist>",
+        "\
+        <?xml version=\"1.0\" encoding=\"UTF-8\"?>
+        <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+        <plist version=\"1.0\">
+        <dict>
+            <key>CFBundleIdentifier</key>
+                <string>{}</string>
+            <key>CFBundleName</key>
+                <string>{}</string>
+            <key>dashIndexFilePath</key>
+                <string>{}/index.html</string>
+            <key>DocSetPlatformFamily</key>
+                <string>{}</string>
+            <key>isDashDocset</key>
+                <true/>
+        </dict>
+        </plist>",
          package_name, package_name, package_name, package_name).context(Io)?;
     Ok(())
 }
@@ -203,15 +199,10 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
     // Step 1: generate rustdoc
     // Figure out for which crate to build the doc and invoke cargo doc.
     // If no crate is specified, run cargo doc for the current crate/workspace.
-    // Other options:
-    // * --all
-    // * -p, --package
-    // * -d, --dependencies
-    let mut compile_opts = CompileOptions::new(&cargo_cfg, CompileMode::Doc { deps: cfg.dependencies }).context(Cargo)?;
-    let cur_package = workspace.current().context(Cargo)?;
+    let mut compile_opts = CompileOptions::new(&cargo_cfg, CompileMode::Doc { deps: !cfg.no_dependencies }).context(Cargo)?;
     let root_package_name = match cfg.package {
-        Package::All => { compile_opts.spec = Packages::All; cur_package.name().as_str().to_owned() }
-        Package::Current => { compile_opts.spec = Packages::Default; cur_package.name().as_str().to_owned() }
+        Package::All => { compile_opts.spec = Packages::All; workspace.root().file_name().unwrap().to_string_lossy().to_string() }
+        Package::Current => { compile_opts.spec = Packages::Default; workspace.current().context(Cargo)?.name().as_str().to_owned() }
         Package::Single(name) => { compile_opts.spec = Packages::Packages(vec![name.clone()]); name }
     };
     let mut docset_root_dir = PathBuf::new();
@@ -222,19 +213,25 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
     docset_root_dir.push("docset");
     docset_root_dir.push(format!("{}.docset", root_package_name));
 
+    // We must clear the doc dir first, as there may be doc generated from previous runs there that
+    // we don't want to pick up.
+    if rustdoc_root_dir.exists() {
+        remove_dir_all(&rustdoc_root_dir).context(Io)?;
+    }
+    // Good to go, generate the documentation.
     let doc_cfg = DocOptions { open_result: false, compile_opts };
     doc(&workspace, &doc_cfg).context(Cargo)?;
-    println!("Generated rustdoc for package {}", root_package_name);
 
     // Step 2: iterate over all the html files in the doc directory and parse the filenames
     let entries = recursive_walk(&rustdoc_root_dir, &rustdoc_root_dir, None)?;
-
-    println!("Got the following entries: {:?}", entries);
+    println!("Found {} entries", entries.len());
 
     // Step 3: generate the SQLite database
     // At this point, we need to start writing into the output docset directory, so create the
     // hirerarchy, and clean it first if it already exists.
-    remove_dir_all(&docset_root_dir).context(Io)?;
+    if docset_root_dir.exists() {
+        remove_dir_all(&docset_root_dir).context(Io)?;
+    }
     let mut docset_hierarchy = docset_root_dir.clone();
     docset_hierarchy.push("Contents");
     docset_hierarchy.push("Resources");
