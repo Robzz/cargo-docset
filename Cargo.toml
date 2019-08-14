@@ -1,8 +1,16 @@
 [package]
 name = "cargo-docset"
-version = "0.1.0"
 authors = ["R.Chavignat <r.chavignat@gmail.com>"]
+description = "Generates a Zeal/Dash docset for your rust package."
 edition = "2018"
+version = "0.1.0"
+
+repository = "https://github.com/Robzz/cargo-docset"
+readme = "README.md"
+license = "Apache-2.0"
+keywords = ["zeal", "dash", "docset", "documentation"]
+categories = ["development-tools", "command-line-utilities"]
+maintenance = { status = "experimental" }
 
 [dependencies]
 cargo = "0.37"
