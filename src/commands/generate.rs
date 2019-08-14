@@ -39,7 +39,7 @@ impl Default for GenerateConfig {
 fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(module_path: &Option<&str>, rustdoc_root_dir: P1, file_path: P2) -> Option<DocsetEntry> {
     if file_path.as_ref().extension() == Some(OsStr::new("html")) {
         let file_name = file_path.as_ref().file_name().unwrap().to_string_lossy();
-        let parts = file_name.split(".").collect::<Vec<_>>();
+        let parts = file_name.split('.').collect::<Vec<_>>();
 
         let file_db_path = file_path.as_ref().strip_prefix(&rustdoc_root_dir).unwrap().to_owned();
         match parts.len() {
@@ -95,7 +95,7 @@ fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(module_path: &Option<&st
     }
 }
 
-const ROOT_SKIP_DIRS: &[&'static str] = &["src", "implementors"];
+const ROOT_SKIP_DIRS: &[&str] = &["src", "implementors"];
 
 fn recursive_walk(root_dir: &Path, cur_dir: &Path, module_path: Option<&str>) -> Result<Vec<DocsetEntry>> {
     let dir = read_dir(cur_dir).context(Io)?;
@@ -105,7 +105,7 @@ fn recursive_walk(root_dir: &Path, cur_dir: &Path, module_path: Option<&str>) ->
     for dir_entry in dir {
         let dir_entry = dir_entry.unwrap();
         if dir_entry.file_type().unwrap().is_dir() {
-            let mut subdir_module_path = module_path.map(|p| format!("{}::", p)).unwrap_or(String::new());
+            let mut subdir_module_path = module_path.map(|p| format!("{}::", p)).unwrap_or_default();
             let dir_name = dir_entry.file_name().to_string_lossy().to_string();
 
             // Ignore some of the root directories which are of no interest to us
@@ -114,10 +114,8 @@ fn recursive_walk(root_dir: &Path, cur_dir: &Path, module_path: Option<&str>) ->
                 subdir_entries.push(recursive_walk(&root_dir, &dir_entry.path(), Some(&subdir_module_path)));
             }
         }
-        else {
-            if let Some(entry) = parse_docset_entry(&module_path, &root_dir, &dir_entry.path()) {
-                entries.push(entry);
-            }
+        else if let Some(entry) = parse_docset_entry(&module_path, &root_dir, &dir_entry.path()) {
+            entries.push(entry);
         }
     }
     for v in subdir_entries {
@@ -204,6 +202,7 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
         Package::All => { compile_opts.spec = Packages::All; workspace.root().file_name().unwrap().to_string_lossy().to_string() }
         Package::Current => { compile_opts.spec = Packages::Default; workspace.current().context(Cargo)?.name().as_str().to_owned() }
         Package::Single(name) => { compile_opts.spec = Packages::Packages(vec![name.clone()]); name }
+        Package::List(packages) => { compile_opts.spec = Packages::Packages(packages); workspace.root().file_name().unwrap().to_string_lossy().to_string() }
     };
     let mut docset_root_dir = PathBuf::new();
     docset_root_dir.push(workspace.root());
@@ -224,7 +223,6 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
 
     // Step 2: iterate over all the html files in the doc directory and parse the filenames
     let entries = recursive_walk(&rustdoc_root_dir, &rustdoc_root_dir, None)?;
-    println!("Found {} entries", entries.len());
 
     // Step 3: generate the SQLite database
     // At this point, we need to start writing into the output docset directory, so create the

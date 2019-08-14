@@ -6,7 +6,8 @@ use std::{ fmt::Display, path::PathBuf};
 pub enum Package {
     All,
     Current,
-    Single(String)
+    Single(String),
+    List(Vec<String>)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

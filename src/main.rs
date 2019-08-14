@@ -44,6 +44,9 @@ fn main() -> Result<()> {
     cfg.package = if sub_matches.is_present("all") {
         Package::All
     }
+    else if let Some(packages) = sub_matches.values_of_lossy("package") {
+        Package::List(packages)
+    }
     else if let Some(package) = sub_matches.value_of("package") {
         Package::Single(package.to_owned())
     }
