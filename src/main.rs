@@ -1,4 +1,4 @@
-use clap::{App, Arg, SubCommand};
+use clap::{App, Arg, SubCommand, crate_authors, crate_version};
 use cargo::{
     Config as CargoCfg,
     core::Workspace,
@@ -19,8 +19,8 @@ use crate::error::*;
 fn main() -> Result<()> {
     let matches =
         App::new("cargo-docset")
-        .version("0.1")
-        .author("Robin Chavignat")
+        .version(crate_version!())
+        .author(crate_authors!())
         .about("Generates a Zeal/Dash docset from a crate documentation.")
         .bin_name("cargo")
         .subcommand(
@@ -51,6 +51,7 @@ fn main() -> Result<()> {
         Package::Single(package.to_owned())
     }
     else { Package::Current };
+    cfg.doc_private_items = sub_matches.is_present("document-private-items");
 
     let cur_dir = current_dir().context(Io)?;
     let root_manifest = find_root_manifest_for_wd(&cur_dir).context(Cargo)?;

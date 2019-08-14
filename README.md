@@ -21,7 +21,7 @@ the gathered information. The details of docset generation are available [here](
 the granularity of the index it can provide. In particular, the generated docset does not make use of the table of
 contents feature.
 
-Also, because `cargo-docset` walks through the __whole `doc` directory, it must clear it before attempting to generate
+Also, because `cargo-docset` walks through the whole `doc` directory, it must clear it before attempting to generate
 the docset, in case there is some previously generated documentation that we don't want to pickup in the docset there.
 You should probably not be storing anything of value in that directory anyway, but keep it in mind.
 

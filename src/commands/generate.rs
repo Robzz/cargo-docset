@@ -27,12 +27,13 @@ use std::{
 #[derive(Debug)]
 pub struct GenerateConfig {
     pub package: Package,
-    pub no_dependencies: bool
+    pub no_dependencies: bool,
+    pub doc_private_items: bool
 }
 
 impl Default for GenerateConfig {
     fn default() -> GenerateConfig {
-        GenerateConfig { package: Package::Current, no_dependencies: false }
+        GenerateConfig { package: Package::Current, no_dependencies: false, doc_private_items: false }
     }
 }
 
@@ -198,6 +199,9 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
     // Figure out for which crate to build the doc and invoke cargo doc.
     // If no crate is specified, run cargo doc for the current crate/workspace.
     let mut compile_opts = CompileOptions::new(&cargo_cfg, CompileMode::Doc { deps: !cfg.no_dependencies }).context(Cargo)?;
+    if cfg.doc_private_items {
+        compile_opts.local_rustdoc_args = Some(vec!["--document-private-items".to_owned()]);
+    }
     let root_package_name = match cfg.package {
         Package::All => { compile_opts.spec = Packages::All; workspace.root().file_name().unwrap().to_string_lossy().to_string() }
         Package::Current => { compile_opts.spec = Packages::Default; workspace.current().context(Cargo)?.name().as_str().to_owned() }
