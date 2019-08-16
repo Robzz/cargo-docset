@@ -1,0 +1,50 @@
+language: rust
+
+sudo: required
+
+os:
+  - linux
+  #- osx
+  #- windows
+
+rust:
+  - stable
+  - beta
+  - nightly
+
+stage: build and test
+
+addons:
+  apt:
+    packages:
+      - sqlite3
+  #homebrew:
+    #packages:
+      #- sqlite
+
+env:
+  global:
+    - RUSTFLAGS="-C link-dead-code"
+
+script:
+    - cargo build --verbose
+
+jobs:
+  allow_failures:
+    - rust: nightly
+  fast_finish: true
+  include:
+    - stage: static analysis
+      name: "Clippy"
+      addons: { }
+      rust: stable
+      cache:
+        cargo: true
+      before_script: rustup component add clippy
+      script: cargo clippy -- -D clippy::all
+      after_success:
+
+stages:
+    #- pre-build checks
+    - build and test
+    - static analysis
