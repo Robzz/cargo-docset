@@ -12,6 +12,9 @@ keywords = ["zeal", "dash", "docset", "documentation"]
 categories = ["development-tools", "command-line-utilities"]
 maintenance = { status = "experimental" }
 
+[badges]
+travis-ci = { repository = "Robzz/cargo-docset", branch = "master" }
+
 [dependencies]
 cargo = "0.37"
 clap = "2.33"
