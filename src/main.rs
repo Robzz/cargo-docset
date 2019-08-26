@@ -26,18 +26,30 @@ fn main() -> Result<()> {
         .subcommand(
             SubCommand::with_name("docset")
             .arg(
-                Arg::from_usage(" -p, --package <SPEC>... 'Package(s) to document'")
+                Arg::from_usage(" -p, --package <SPEC>...  'Package(s) to document'")
                 .required(false))
+            .arg(
+                Arg::from_usage("-v, --verbose  'Enable verbose output (-vv for extra verbosity).'")
+                .multiple(true))
             .args_from_usage(
-                "--all                      'Document all packages in the workspace'
+                "-q, --quiet                'Suppress all output to stdout.'
+                --all                       'Document all packages in the workspace'
                 --no-deps                   'Dont build documentation for dependencies'
                 --document-private-items    'Document private items'
                 "))
         .get_matches();
     let sub_matches = matches.subcommand_matches("docset").unwrap();
 
+    let quiet = sub_matches.is_present("quiet");
+    let verbosity_level = sub_matches.occurrences_of("verbose") as u32;
+
+    if quiet && verbosity_level != 0 {
+        eprintln!("Cannot specify `--quiet` with `--verbose`.");
+        return Ok(())
+    }
+
     let mut cargo_cfg = CargoCfg::default().context(Cargo)?;
-    cargo_cfg.configure(0, Some(false), &None, false, false, false, &None, &[]).context(Cargo)?;
+    cargo_cfg.configure(verbosity_level, Some(quiet), &None, false, false, false, &None, &[]).context(Cargo)?;
 
     let mut cfg = GenerateConfig::default();
     cfg.no_dependencies = sub_matches.is_present("no-deps");
