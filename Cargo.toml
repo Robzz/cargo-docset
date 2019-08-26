@@ -10,15 +10,15 @@ readme = "README.md"
 license = "Apache-2.0"
 keywords = ["zeal", "dash", "docset", "documentation"]
 categories = ["development-tools", "command-line-utilities"]
-maintenance = { status = "experimental" }
 
 [badges]
+maintenance = { status = "experimental" }
 travis-ci = { repository = "Robzz/cargo-docset", branch = "master" }
 
 [dependencies]
-cargo = "0.37"
+cargo = "0.38"
 clap = "2.33"
 derive_more = "0.15"
 failure = "0.1"
 rusqlite = "0.20"
-snafu = "0.4"
+snafu = "0.5"
