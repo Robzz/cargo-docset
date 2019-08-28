@@ -26,7 +26,11 @@ fn main() -> Result<()> {
         .subcommand(
             SubCommand::with_name("docset")
             .arg(
-                Arg::from_usage(" -p, --package <SPEC>...  'Package(s) to document'")
+                Arg::from_usage("-p, --package <SPEC>...  'Package(s) to document'")
+                .required(false))
+            .arg(
+                Arg::from_usage("--exclude <SPEC>...  'Package(s) to exclude from the documentation'")
+                .multiple(true)
                 .required(false))
             .arg(
                 Arg::from_usage("-v, --verbose  'Enable verbose output (-vv for extra verbosity).'")
@@ -64,6 +68,7 @@ fn main() -> Result<()> {
     }
     else { Package::Current };
     cfg.doc_private_items = sub_matches.is_present("document-private-items");
+    cfg.exclude = sub_matches.values_of_lossy("exclude").unwrap_or_else(|| Vec::new());
 
     let cur_dir = current_dir().context(Io)?;
     let root_manifest = find_root_manifest_for_wd(&cur_dir).context(Cargo)?;

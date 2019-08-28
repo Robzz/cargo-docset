@@ -46,6 +46,10 @@ pub enum Error {
     },
     Sqlite {
         source: rusqlite::Error
+    },
+    #[snafu(display("Invalid arguments: {}", msg))]
+    Args {
+        msg: &'static str
     }
 }
 

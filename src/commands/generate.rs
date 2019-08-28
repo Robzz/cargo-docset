@@ -28,12 +28,18 @@ use std::{
 pub struct GenerateConfig {
     pub package: Package,
     pub no_dependencies: bool,
-    pub doc_private_items: bool
+    pub doc_private_items: bool,
+    pub exclude: Vec<String>
 }
 
 impl Default for GenerateConfig {
     fn default() -> GenerateConfig {
-        GenerateConfig { package: Package::Current, no_dependencies: false, doc_private_items: false }
+        GenerateConfig {
+            package: Package::Current,
+            no_dependencies: false,
+            doc_private_items: false,
+            exclude: Vec::new()
+        }
     }
 }
 
@@ -202,12 +208,23 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
     if cfg.doc_private_items {
         compile_opts.local_rustdoc_args = Some(vec!["--document-private-items".to_owned()]);
     }
-    let root_package_name = match cfg.package {
-        Package::All => { compile_opts.spec = Packages::All; workspace.root().file_name().unwrap().to_string_lossy().to_string() }
+    let root_package_name = match &cfg.package {
+        Package::All => {
+            if cfg.exclude.is_empty() {
+                compile_opts.spec = Packages::All;
+            }
+            else {
+                compile_opts.spec = Packages::OptOut(cfg.exclude.clone());
+            }
+            workspace.root().file_name().unwrap().to_string_lossy().to_string()
+        }
         Package::Current => { compile_opts.spec = Packages::Default; workspace.current().context(Cargo)?.name().as_str().to_owned() }
-        Package::Single(name) => { compile_opts.spec = Packages::Packages(vec![name.clone()]); name }
-        Package::List(packages) => { compile_opts.spec = Packages::Packages(packages); workspace.root().file_name().unwrap().to_string_lossy().to_string() }
+        Package::Single(name) => { compile_opts.spec = Packages::Packages(vec![name.clone()]); name.to_owned() }
+        Package::List(packages) => { compile_opts.spec = Packages::Packages(packages.clone()); workspace.root().file_name().unwrap().to_string_lossy().to_string() }
     };
+    if cfg.package != Package::All && !cfg.exclude.is_empty() {
+        return Args { msg: "--exclude must be used with --all" }.fail();
+    }
     let mut docset_root_dir = PathBuf::new();
     docset_root_dir.push(workspace.root());
     docset_root_dir.push("target");
