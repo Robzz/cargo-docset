@@ -1,6 +1,6 @@
 language: rust
-
 sudo: required
+cache: cargo
 
 os:
   - linux
