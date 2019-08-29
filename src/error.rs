@@ -1,18 +1,15 @@
 use failure::Error as FailureError;
 use snafu::Snafu;
 
-use std::{
-    error::Error as StdError,
-    result::Result as StdResult
-};
+use std::{error::Error as StdError, result::Result as StdResult};
 
 pub struct FailureCompat {
-    e: FailureError,
+    e: FailureError
 }
 
 impl FailureCompat {
     /// Create a new FailureCompat.
-    fn new(e: FailureError) -> FailureCompat{
+    fn new(e: FailureError) -> FailureCompat {
         FailureCompat { e }
     }
 }
@@ -29,8 +26,7 @@ impl std::fmt::Display for FailureCompat {
     }
 }
 
-impl StdError for FailureCompat {
-}
+impl StdError for FailureCompat {}
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub")]

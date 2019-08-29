@@ -6,12 +6,9 @@ use crate::{
 };
 
 use cargo::{
-    Config as CargoConfig,
-    core::{
-        compiler::CompileMode,
-        Workspace
-    },
-    ops::{doc, CompileOptions, DocOptions, Packages}
+    core::{compiler::CompileMode, Workspace},
+    ops::{doc, CompileOptions, DocOptions, Packages},
+    Config as CargoConfig
 };
 use rusqlite::{params, Connection};
 use snafu::ResultExt;
@@ -19,8 +16,8 @@ use snafu::ResultExt;
 use std::{
     borrow::ToOwned,
     ffi::OsStr,
+    fs::{copy, create_dir_all, read_dir, remove_dir_all, File},
     io::Write,
-    fs::{copy, create_dir_all, File, read_dir, remove_dir_all},
     path::{Path, PathBuf}
 };
 
@@ -43,12 +40,20 @@ impl Default for GenerateConfig {
     }
 }
 
-fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(module_path: &Option<&str>, rustdoc_root_dir: P1, file_path: P2) -> Option<DocsetEntry> {
+fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(
+    module_path: &Option<&str>,
+    rustdoc_root_dir: P1,
+    file_path: P2
+) -> Option<DocsetEntry> {
     if file_path.as_ref().extension() == Some(OsStr::new("html")) {
         let file_name = file_path.as_ref().file_name().unwrap().to_string_lossy();
         let parts = file_name.split('.').collect::<Vec<_>>();
 
-        let file_db_path = file_path.as_ref().strip_prefix(&rustdoc_root_dir).unwrap().to_owned();
+        let file_db_path = file_path
+            .as_ref()
+            .strip_prefix(&rustdoc_root_dir)
+            .unwrap()
+            .to_owned();
         match parts.len() {
             2 => {
                 match parts[0] {
@@ -56,55 +61,78 @@ fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(module_path: &Option<&st
                         if let Some(mod_path) = module_path {
                             if mod_path.contains(':') {
                                 // Module entry
-                                Some(DocsetEntry::new(format!("{}::{}", mod_path, parts[0]), EntryType::Module, file_db_path))
-                            }
-                            else {
+                                Some(DocsetEntry::new(
+                                    format!("{}::{}", mod_path, parts[0]),
+                                    EntryType::Module,
+                                    file_db_path
+                                ))
+                            } else {
                                 // Package entry
-                                Some(DocsetEntry::new(mod_path.to_string(), EntryType::Package, file_db_path))
+                                Some(DocsetEntry::new(
+                                    mod_path.to_string(),
+                                    EntryType::Package,
+                                    file_db_path
+                                ))
                             }
+                        } else {
+                            None
                         }
-                        else { None }
                     }
                     _ => None
                 }
             }
-            3 => {
-                match parts[0] {
-                    "const" => {
-                        Some(DocsetEntry::new(format!("{}::{}", module_path.unwrap().to_string(), parts[1]), EntryType::Constant, file_db_path))
-                    }
-                    "enum" => {
-                        Some(DocsetEntry::new(format!("{}::{}", module_path.unwrap().to_string(), parts[1]), EntryType::Enum, file_db_path))
-                    }
-                    "fn" => {
-                        Some(DocsetEntry::new(format!("{}::{}", module_path.unwrap().to_string(), parts[1]), EntryType::Function, file_db_path))
-                    }
-                    "macro" => {
-                        Some(DocsetEntry::new(format!("{}::{}", module_path.unwrap().to_string(), parts[1]), EntryType::Macro, file_db_path))
-                    }
-                    "trait" => {
-                        Some(DocsetEntry::new(format!("{}::{}", module_path.unwrap().to_string(), parts[1]), EntryType::Trait, file_db_path))
-                    }
-                    "struct" => {
-                        Some(DocsetEntry::new(format!("{}::{}", module_path.unwrap().to_string(), parts[1]), EntryType::Struct, file_db_path))
-                    }
-                    "type" => {
-                        Some(DocsetEntry::new(format!("{}::{}", module_path.unwrap().to_string(), parts[1]), EntryType::Type, file_db_path))
-                    }
-                    _ => None
-                }
-            }
+            3 => match parts[0] {
+                "const" => Some(DocsetEntry::new(
+                    format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
+                    EntryType::Constant,
+                    file_db_path
+                )),
+                "enum" => Some(DocsetEntry::new(
+                    format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
+                    EntryType::Enum,
+                    file_db_path
+                )),
+                "fn" => Some(DocsetEntry::new(
+                    format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
+                    EntryType::Function,
+                    file_db_path
+                )),
+                "macro" => Some(DocsetEntry::new(
+                    format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
+                    EntryType::Macro,
+                    file_db_path
+                )),
+                "trait" => Some(DocsetEntry::new(
+                    format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
+                    EntryType::Trait,
+                    file_db_path
+                )),
+                "struct" => Some(DocsetEntry::new(
+                    format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
+                    EntryType::Struct,
+                    file_db_path
+                )),
+                "type" => Some(DocsetEntry::new(
+                    format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
+                    EntryType::Type,
+                    file_db_path
+                )),
+                _ => None
+            },
             _ => None
         }
-    }
-    else {
+    } else {
         None
     }
 }
 
 const ROOT_SKIP_DIRS: &[&str] = &["src", "implementors"];
 
-fn recursive_walk(root_dir: &Path, cur_dir: &Path, module_path: Option<&str>) -> Result<Vec<DocsetEntry>> {
+fn recursive_walk(
+    root_dir: &Path,
+    cur_dir: &Path,
+    module_path: Option<&str>
+) -> Result<Vec<DocsetEntry>> {
     let dir = read_dir(cur_dir).context(Io)?;
     let mut entries = vec![];
     let mut subdir_entries = vec![];
@@ -112,16 +140,20 @@ fn recursive_walk(root_dir: &Path, cur_dir: &Path, module_path: Option<&str>) ->
     for dir_entry in dir {
         let dir_entry = dir_entry.unwrap();
         if dir_entry.file_type().unwrap().is_dir() {
-            let mut subdir_module_path = module_path.map(|p| format!("{}::", p)).unwrap_or_default();
+            let mut subdir_module_path =
+                module_path.map(|p| format!("{}::", p)).unwrap_or_default();
             let dir_name = dir_entry.file_name().to_string_lossy().to_string();
 
             // Ignore some of the root directories which are of no interest to us
             if !(module_path.is_none() && ROOT_SKIP_DIRS.contains(&dir_name.as_str())) {
                 subdir_module_path.push_str(&dir_name);
-                subdir_entries.push(recursive_walk(&root_dir, &dir_entry.path(), Some(&subdir_module_path)));
+                subdir_entries.push(recursive_walk(
+                    &root_dir,
+                    &dir_entry.path(),
+                    Some(&subdir_module_path)
+                ));
             }
-        }
-        else if let Some(entry) = parse_docset_entry(&module_path, &root_dir, &dir_entry.path()) {
+        } else if let Some(entry) = parse_docset_entry(&module_path, &root_dir, &dir_entry.path()) {
             entries.push(entry);
         }
     }
@@ -141,13 +173,21 @@ fn generate_sqlite_index<P: AsRef<Path>>(docset_dir: P, entries: Vec<DocsetEntry
         "CREATE TABLE searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT);
         CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path);
         )",
-        params![],
-    ).context(Sqlite)?;
+        params![]
+    )
+    .context(Sqlite)?;
     let transaction = conn.transaction().context(Sqlite)?;
     {
-        let mut stmt = transaction.prepare("INSERT INTO searchIndex (name, type, path) VALUES (?1, ?2, ?3)").context(Sqlite)?;
+        let mut stmt = transaction
+            .prepare("INSERT INTO searchIndex (name, type, path) VALUES (?1, ?2, ?3)")
+            .context(Sqlite)?;
         for entry in entries {
-            stmt.execute(&[entry.name, entry.ty.to_string(), entry.path.to_str().unwrap().to_owned()]).context(Sqlite)?;
+            stmt.execute(&[
+                entry.name,
+                entry.ty.to_string(),
+                entry.path.to_str().unwrap().to_owned()
+            ])
+            .context(Sqlite)?;
         }
     }
     transaction.commit().context(Sqlite)?;
@@ -162,8 +202,7 @@ fn copy_dir_recursive<Ps: AsRef<Path>, Pd: AsRef<Path>>(src: Ps, dst: Pd) -> Res
             let mut dst_dir = dst.as_ref().to_owned();
             dst_dir.push(entry.strip_prefix(&src).unwrap());
             copy_dir_recursive(entry, dst_dir)?;
-        }
-        else if entry.is_file() {
+        } else if entry.is_file() {
             let mut dst_file = dst.as_ref().to_owned();
             dst_file.push(entry.file_name().unwrap());
             copy(entry, dst_file).context(Io)?;
@@ -204,7 +243,13 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
     // Step 1: generate rustdoc
     // Figure out for which crate to build the doc and invoke cargo doc.
     // If no crate is specified, run cargo doc for the current crate/workspace.
-    let mut compile_opts = CompileOptions::new(&cargo_cfg, CompileMode::Doc { deps: !cfg.no_dependencies }).context(Cargo)?;
+    let mut compile_opts = CompileOptions::new(
+        &cargo_cfg,
+        CompileMode::Doc {
+            deps: !cfg.no_dependencies
+        }
+    )
+    .context(Cargo)?;
     if cfg.doc_private_items {
         compile_opts.local_rustdoc_args = Some(vec!["--document-private-items".to_owned()]);
     }
@@ -212,18 +257,44 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
         Package::All => {
             if cfg.exclude.is_empty() {
                 compile_opts.spec = Packages::All;
-            }
-            else {
+            } else {
                 compile_opts.spec = Packages::OptOut(cfg.exclude.clone());
             }
-            workspace.root().file_name().unwrap().to_string_lossy().to_string()
+            workspace
+                .root()
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
         }
-        Package::Current => { compile_opts.spec = Packages::Default; workspace.current().context(Cargo)?.name().as_str().to_owned() }
-        Package::Single(name) => { compile_opts.spec = Packages::Packages(vec![name.clone()]); name.to_owned() }
-        Package::List(packages) => { compile_opts.spec = Packages::Packages(packages.clone()); workspace.root().file_name().unwrap().to_string_lossy().to_string() }
+        Package::Current => {
+            compile_opts.spec = Packages::Default;
+            workspace
+                .current()
+                .context(Cargo)?
+                .name()
+                .as_str()
+                .to_owned()
+        }
+        Package::Single(name) => {
+            compile_opts.spec = Packages::Packages(vec![name.clone()]);
+            name.to_owned()
+        }
+        Package::List(packages) => {
+            compile_opts.spec = Packages::Packages(packages.clone());
+            workspace
+                .root()
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        }
     };
     if cfg.package != Package::All && !cfg.exclude.is_empty() {
-        return Args { msg: "--exclude must be used with --all" }.fail();
+        return Args {
+            msg: "--exclude must be used with --all"
+        }
+        .fail();
     }
     let mut docset_root_dir = PathBuf::new();
     docset_root_dir.push(workspace.root());
@@ -239,7 +310,10 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
         remove_dir_all(&rustdoc_root_dir).context(Io)?;
     }
     // Good to go, generate the documentation.
-    let doc_cfg = DocOptions { open_result: false, compile_opts };
+    let doc_cfg = DocOptions {
+        open_result: false,
+        compile_opts
+    };
     doc(&workspace, &doc_cfg).context(Cargo)?;
 
     // Step 2: iterate over all the html files in the doc directory and parse the filenames
