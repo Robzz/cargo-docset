@@ -29,6 +29,4 @@ You should probably not be storing anything of value in that directory anyway, b
 
 ## Contributions
 
-Contributions are welcome, please report bugs you find and add your feature requests to the bug tracker. If you want to
-contribute code, please let us know on the related issue so that it can be assigned to you, or create one if it doesn't
-exist.
+See [here](./CONTRIBUTING.md).
