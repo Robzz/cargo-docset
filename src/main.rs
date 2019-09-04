@@ -49,7 +49,10 @@ fn main() -> Result<()> {
                     --no-deps                'Dont build documentation for dependencies'
                     --document-private-items 'Document private items'
                     --all-features           'Build with all features enabled'
-                    --no-default-features    'Build without the 'default' feature"
+                    --no-default-features    'Build without the 'default' feature'
+                    --frozen                 'Require Cargo.lock and cache are up to date'
+                    --locked                 'Require Cargo.lock is up to date'
+                    --offline                'Run without accessing the network'"
                 )
         )
         .get_matches();
@@ -69,9 +72,9 @@ fn main() -> Result<()> {
             verbosity_level,
             Some(quiet),
             &None,
-            false,
-            false,
-            false,
+            sub_matches.is_present("frozen"),
+            sub_matches.is_present("locked"),
+            sub_matches.is_present("offline"),
             &None,
             &[]
         )
