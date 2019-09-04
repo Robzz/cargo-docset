@@ -26,6 +26,9 @@ pub struct GenerateConfig {
     pub package: Package,
     pub no_dependencies: bool,
     pub doc_private_items: bool,
+    pub features: Vec<String>,
+    pub no_default_features: bool,
+    pub all_features: bool,
     pub exclude: Vec<String>
 }
 
@@ -35,7 +38,10 @@ impl Default for GenerateConfig {
             package: Package::Current,
             no_dependencies: false,
             doc_private_items: false,
-            exclude: Vec::new()
+            exclude: Vec::new(),
+            features: Vec::new(),
+            no_default_features: true,
+            all_features: false
         }
     }
 }
@@ -250,6 +256,9 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
         }
     )
     .context(Cargo)?;
+    compile_opts.all_features = cfg.all_features;
+    compile_opts.no_default_features = cfg.no_default_features;
+    compile_opts.features = cfg.features;
     if cfg.doc_private_items {
         compile_opts.local_rustdoc_args = Some(vec!["--document-private-items".to_owned()]);
     }

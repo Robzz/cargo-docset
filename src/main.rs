@@ -39,12 +39,20 @@ fn main() -> Result<()> {
                     )
                     .multiple(true)
                 )
+                .arg(
+                    Arg::from_usage("--features <FEATURES> 'Space separated list of features to activate'")
+                        .required(false)
+                )
                 .args_from_usage(
-                    "-q, --quiet                'Suppress all output to stdout.'
-                --all                       'Document all packages in the workspace'
-                --no-deps                   'Dont build documentation for dependencies'
-                --document-private-items    'Document private items'
-                "
+                    "-q, --quiet             'Suppress all output to stdout.'
+                    --all                    'Document all packages in the workspace'
+                    --no-deps                'Dont build documentation for dependencies'
+                    --document-private-items 'Document private items'
+                    --all-features           'Build with all features enabled'
+                    --no-default-features    'Build without the 'default' feature'
+                    --frozen                 'Require Cargo.lock and cache are up to date'
+                    --locked                 'Require Cargo.lock is up to date'
+                    --offline                'Run without accessing the network'"
                 )
         )
         .get_matches();
@@ -64,9 +72,9 @@ fn main() -> Result<()> {
             verbosity_level,
             Some(quiet),
             &None,
-            false,
-            false,
-            false,
+            sub_matches.is_present("frozen"),
+            sub_matches.is_present("locked"),
+            sub_matches.is_present("offline"),
             &None,
             &[]
         )
@@ -87,6 +95,15 @@ fn main() -> Result<()> {
     cfg.exclude = sub_matches
         .values_of_lossy("exclude")
         .unwrap_or_else(Vec::new);
+    if sub_matches.is_present("all-features") {
+        cfg.all_features = true;
+    }
+    if sub_matches.is_present("no-default-features") {
+        cfg.no_default_features = true;
+    }
+    if sub_matches.is_present("features") {
+        cfg.features = sub_matches.values_of_lossy("features").unwrap();
+    }
 
     let cur_dir = current_dir().context(Io)?;
     let root_manifest = find_root_manifest_for_wd(&cur_dir).context(Cargo)?;

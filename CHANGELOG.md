@@ -2,6 +2,9 @@
 
 ## Unpublished - v0.1.2
 
+* Feature: add --features, --no-default-features and --all-features options
+* Feature: add --frozen, --locked and --offline options
+
 ## 8/29/2019 - v0.1.1
 
 * Feature: add --exclude option
