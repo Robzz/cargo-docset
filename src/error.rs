@@ -36,8 +36,31 @@ pub enum Error {
         #[snafu(source(from(FailureError, FailureCompat::new)))]
         source: FailureCompat
     },
+    #[snafu(display("Cargo doc error: {}", source))]
+    CargoDoc {
+        #[snafu(source(from(FailureError, FailureCompat::new)))]
+        source: FailureCompat
+    },
+    #[snafu(display("Cargo configuration error: {}", source))]
+    CargoConfig {
+        #[snafu(source(from(FailureError, FailureCompat::new)))]
+        source: FailureCompat
+    },
+    #[snafu(display("Cargo clean error: {}", source))]
+    CargoClean {
+        #[snafu(source(from(FailureError, FailureCompat::new)))]
+        source: FailureCompat
+    },
+    #[snafu(display("Cannot determine the current directory: {}", source))]
+    Cwd {
+        source: std::io::Error
+    },
     #[snafu(display("I/O error: {}", source))]
-    Io {
+    IoRead {
+        source: std::io::Error
+    },
+    #[snafu(display("I/O error: {}", source))]
+    IoWrite {
         source: std::io::Error
     },
     Sqlite {

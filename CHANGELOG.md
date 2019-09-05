@@ -4,6 +4,8 @@
 
 * Feature: add --features, --no-default-features and --all-features options
 * Feature: add --frozen, --locked and --offline options
+* Enhancement: use cargo clean command instead of `remove\_dir\_all` to clean the rustdoc directory
+* Enhancement: better error output
 
 ## 8/29/2019 - v0.1.1
 
