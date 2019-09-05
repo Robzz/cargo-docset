@@ -7,7 +7,7 @@ use crate::{
 
 use cargo::{
     core::{compiler::CompileMode, Workspace},
-    ops::{clean, CleanOptions, doc, CompileOptions, DocOptions, Packages},
+    ops::{clean, CleanOptions, doc, CompileFilter, CompileOptions, DocOptions, FilterRule, LibRule, Packages},
     Config as CargoConfig
 };
 use rusqlite::{params, Connection};
@@ -29,7 +29,10 @@ pub struct GenerateConfig {
     pub features: Vec<String>,
     pub no_default_features: bool,
     pub all_features: bool,
-    pub exclude: Vec<String>
+    pub exclude: Vec<String>,
+    pub clean: bool,
+    pub lib: bool,
+    pub bins: Option<Vec<String>>
 }
 
 impl Default for GenerateConfig {
@@ -41,7 +44,10 @@ impl Default for GenerateConfig {
             exclude: Vec::new(),
             features: Vec::new(),
             no_default_features: true,
-            all_features: false
+            all_features: false,
+            clean: true,
+            lib: false,
+            bins: None
         }
     }
 }
@@ -258,6 +264,26 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
     compile_opts.all_features = cfg.all_features;
     compile_opts.no_default_features = cfg.no_default_features;
     compile_opts.features = cfg.features;
+    if cfg.lib || cfg.bins.is_some() {
+        let bins_filter_rule =
+            if let Some(bins) = cfg.bins {
+                if bins.is_empty() {
+                    FilterRule::All
+                }
+                else {
+                    FilterRule::Just(bins)
+                }
+            }
+            else { FilterRule::Just(vec![]) };
+        compile_opts.filter = CompileFilter::Only {
+            all_targets: false,
+            lib: if cfg.lib { LibRule::True } else { LibRule::Default },
+            bins: bins_filter_rule,
+            examples: FilterRule::Just(vec![]),
+            tests: FilterRule::Just(vec![]),
+            benches: FilterRule::Just(vec![]),
+        }
+    }
     if cfg.doc_private_items {
         compile_opts.local_rustdoc_args = Some(vec!["--document-private-items".to_owned()]);
     }
@@ -312,10 +338,10 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
     docset_root_dir.push("docset");
     docset_root_dir.push(format!("{}.docset", root_package_name));
 
-    // We must clear the doc dir first, as there may be doc generated from previous runs there that
-    // we don't want to pick up.
-    let clean_options = CleanOptions { config: &cargo_cfg, spec: vec![], target: None, release: false, doc: true };
-    clean(&workspace, &clean_options).context(CargoClean)?;
+    if cfg.clean {
+        let clean_options = CleanOptions { config: &cargo_cfg, spec: vec![], target: None, release: false, doc: true };
+        clean(&workspace, &clean_options).context(CargoClean)?;
+    }
     // Good to go, generate the documentation.
     let doc_cfg = DocOptions {
         open_result: false,

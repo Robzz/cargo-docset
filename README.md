@@ -3,20 +3,21 @@
 [![Build Status](https://travis-ci.org/Robzz/cargo-docset.svg?branch=master)](https://travis-ci.org/Robzz/cargo-docset)
 [![Crate](https://img.shields.io/crates/v/cargo-docset.svg)](https://crates.io/crates/cargo-docset)
 
-`cargo-docset` is a tool enabling you to generate a [Dash](https://kapeli.com/dash)/[Zeal](https://zealdocs.org/)
+`cargo-docset` is a tool allowing you to generate a [Dash](https://kapeli.com/dash)/[Zeal](https://zealdocs.org/)
 compatible docset for your Rust packages and their dependencies.
 
 ## How to use
 
 Just run `cargo docset` in your crate's directory to generate the docset. It will be placed in the `target/docset`
-directory. There are a few options to select which package(s) will be documented, check the help message for details.
+directory. cargo-docset generally supports the same options as `cargo doc`, with a few additional ones. Run `cargo
+docset --help` for more information.
 
 To install your shiny new docset, copy it to your Zeal/Dash docset directory (available in the preferences, on Zeal at
 least) and restart Zeal/Dash.
 
 ## How it works
 
-Currently, `cargo-docset` runs `cargo` to generate the documentation, and then recursively walks the generated
+Currently, `cargo docset` runs `cargo` to generate the documentation, and then recursively walks the generated
 directory. The contents of every file is inferred from the file path, and cargo-docset then fills a SQLite database with
 the gathered information. The details of docset generation are available [here](https://kapeli.com/docsets#dashDocset).
 
