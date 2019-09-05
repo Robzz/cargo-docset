@@ -7,7 +7,7 @@ use crate::{
 
 use cargo::{
     core::{compiler::CompileMode, Workspace},
-    ops::{doc, CompileOptions, DocOptions, Packages},
+    ops::{clean, CleanOptions, doc, CompileOptions, DocOptions, Packages},
     Config as CargoConfig
 };
 use rusqlite::{params, Connection};
@@ -139,7 +139,7 @@ fn recursive_walk(
     cur_dir: &Path,
     module_path: Option<&str>
 ) -> Result<Vec<DocsetEntry>> {
-    let dir = read_dir(cur_dir).context(Io)?;
+    let dir = read_dir(cur_dir).context(IoRead)?;
     let mut entries = vec![];
     let mut subdir_entries = vec![];
 
@@ -201,9 +201,9 @@ fn generate_sqlite_index<P: AsRef<Path>>(docset_dir: P, entries: Vec<DocsetEntry
 }
 
 fn copy_dir_recursive<Ps: AsRef<Path>, Pd: AsRef<Path>>(src: Ps, dst: Pd) -> Result<()> {
-    create_dir_all(&dst).context(Io)?;
-    for entry in read_dir(&src).context(Io)? {
-        let entry = entry.context(Io)?.path();
+    create_dir_all(&dst).context(IoWrite)?;
+    for entry in read_dir(&src).context(IoRead)? {
+        let entry = entry.context(IoWrite)?.path();
         if entry.is_dir() {
             let mut dst_dir = dst.as_ref().to_owned();
             dst_dir.push(entry.strip_prefix(&src).unwrap());
@@ -211,7 +211,7 @@ fn copy_dir_recursive<Ps: AsRef<Path>, Pd: AsRef<Path>>(src: Ps, dst: Pd) -> Res
         } else if entry.is_file() {
             let mut dst_file = dst.as_ref().to_owned();
             dst_file.push(entry.file_name().unwrap());
-            copy(entry, dst_file).context(Io)?;
+            copy(entry, dst_file).context(IoWrite)?;
         }
     }
     Ok(())
@@ -222,7 +222,7 @@ fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str) -> Res
     info_plist_path.push("Contents");
     info_plist_path.push("Info.plist");
 
-    let mut info_file = File::create(info_plist_path).context(Io)?;
+    let mut info_file = File::create(info_plist_path).context(IoWrite)?;
     write!(info_file,
         "\
         <?xml version=\"1.0\" encoding=\"UTF-8\"?>
@@ -241,7 +241,7 @@ fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str) -> Res
                 <true/>
         </dict>
         </plist>",
-         package_name, package_name, package_name, package_name).context(Io)?;
+         package_name, package_name, package_name, package_name).context(IoWrite)?;
     Ok(())
 }
 
@@ -254,8 +254,7 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
         CompileMode::Doc {
             deps: !cfg.no_dependencies
         }
-    )
-    .context(Cargo)?;
+    ).context(CargoDoc)?;
     compile_opts.all_features = cfg.all_features;
     compile_opts.no_default_features = cfg.no_default_features;
     compile_opts.features = cfg.features;
@@ -315,15 +314,14 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
 
     // We must clear the doc dir first, as there may be doc generated from previous runs there that
     // we don't want to pick up.
-    if rustdoc_root_dir.exists() {
-        remove_dir_all(&rustdoc_root_dir).context(Io)?;
-    }
+    let clean_options = CleanOptions { config: &cargo_cfg, spec: vec![], target: None, release: false, doc: true };
+    clean(&workspace, &clean_options).context(CargoClean)?;
     // Good to go, generate the documentation.
     let doc_cfg = DocOptions {
         open_result: false,
         compile_opts
     };
-    doc(&workspace, &doc_cfg).context(Cargo)?;
+    doc(&workspace, &doc_cfg).context(CargoDoc)?;
 
     // Step 2: iterate over all the html files in the doc directory and parse the filenames
     let entries = recursive_walk(&rustdoc_root_dir, &rustdoc_root_dir, None)?;
@@ -332,12 +330,12 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
     // At this point, we need to start writing into the output docset directory, so create the
     // hirerarchy, and clean it first if it already exists.
     if docset_root_dir.exists() {
-        remove_dir_all(&docset_root_dir).context(Io)?;
+        remove_dir_all(&docset_root_dir).context(IoWrite)?;
     }
     let mut docset_hierarchy = docset_root_dir.clone();
     docset_hierarchy.push("Contents");
     docset_hierarchy.push("Resources");
-    create_dir_all(&docset_hierarchy).context(Io)?;
+    create_dir_all(&docset_hierarchy).context(IoWrite)?;
     generate_sqlite_index(&docset_root_dir, entries)?;
 
     // Step 4: Copy the rustdoc to the docset directory
