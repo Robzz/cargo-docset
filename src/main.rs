@@ -64,6 +64,15 @@ fn run(sub_matches: &ArgMatches) -> Result<()> {
     if sub_matches.is_present("no-clean") {
         cfg.clean = false;
     }
+    if sub_matches.is_present("lib") {
+        cfg.lib = true;
+    }
+    if sub_matches.is_present("bins") {
+        cfg.bins = Some(vec![])
+    }
+    else if sub_matches.is_present("bin") {
+        cfg.bins = sub_matches.values_of_lossy("bin");
+    }
 
     let cur_dir = current_dir().context(Cwd)?;
     let root_manifest = find_root_manifest_for_wd(&cur_dir).context(CargoConfig)?;
@@ -93,9 +102,16 @@ fn main() {
                 )
                 .arg(
                     Arg::from_usage(
-                        "-v, --verbose  'Enable verbose output (-vv for extra verbosity).'"
+                        "-v, --verbose  'Enable verbose output (-vv for extra verbosity)'"
                     )
                     .multiple(true)
+                )
+                .arg(
+                    Arg::from_usage(
+                        "--bin <BIN> 'Document only the specified binary'"
+                    )
+                    .multiple(true)
+                    .required(false)
                 )
                 .arg(
                     Arg::from_usage("--features <FEATURES> 'Space separated list of features to activate'")
@@ -105,7 +121,9 @@ fn main() {
                     "-q, --quiet             'Suppress all output to stdout.'
                     -C, --no-clean           'Do not clean the doc directory before generating the rustdoc'
                     --all                    'Document all packages in the workspace'
-                    --no-deps                'Dont build documentation for dependencies'
+                    --lib                    'Document only this package's library'
+                    --bins                   'Document all binaries'
+                    --no-deps                'Don't build documentation for dependencies'
                     --document-private-items 'Document private items'
                     --all-features           'Build with all features enabled'
                     --no-default-features    'Build without the 'default' feature'
