@@ -61,6 +61,9 @@ fn run(sub_matches: &ArgMatches) -> Result<()> {
     if sub_matches.is_present("features") {
         cfg.features = sub_matches.values_of_lossy("features").unwrap();
     }
+    if sub_matches.is_present("no-clean") {
+        cfg.clean = false;
+    }
 
     let cur_dir = current_dir().context(Cwd)?;
     let root_manifest = find_root_manifest_for_wd(&cur_dir).context(CargoConfig)?;
@@ -100,6 +103,7 @@ fn main() {
                 )
                 .args_from_usage(
                     "-q, --quiet             'Suppress all output to stdout.'
+                    -C, --no-clean           'Do not clean the doc directory before generating the rustdoc'
                     --all                    'Document all packages in the workspace'
                     --no-deps                'Dont build documentation for dependencies'
                     --document-private-items 'Document private items'

@@ -29,7 +29,8 @@ pub struct GenerateConfig {
     pub features: Vec<String>,
     pub no_default_features: bool,
     pub all_features: bool,
-    pub exclude: Vec<String>
+    pub exclude: Vec<String>,
+    pub clean: bool
 }
 
 impl Default for GenerateConfig {
@@ -41,7 +42,8 @@ impl Default for GenerateConfig {
             exclude: Vec::new(),
             features: Vec::new(),
             no_default_features: true,
-            all_features: false
+            all_features: false,
+            clean: true
         }
     }
 }
@@ -312,10 +314,10 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
     docset_root_dir.push("docset");
     docset_root_dir.push(format!("{}.docset", root_package_name));
 
-    // We must clear the doc dir first, as there may be doc generated from previous runs there that
-    // we don't want to pick up.
-    let clean_options = CleanOptions { config: &cargo_cfg, spec: vec![], target: None, release: false, doc: true };
-    clean(&workspace, &clean_options).context(CargoClean)?;
+    if cfg.clean {
+        let clean_options = CleanOptions { config: &cargo_cfg, spec: vec![], target: None, release: false, doc: true };
+        clean(&workspace, &clean_options).context(CargoClean)?;
+    }
     // Good to go, generate the documentation.
     let doc_cfg = DocOptions {
         open_result: false,
