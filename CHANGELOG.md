@@ -1,5 +1,10 @@
 # cargo-docset changelog
 
+## 10/28/2019 - v0.1.3
+
+* Bugfix: don't crash the application when invoked directly as `cargo-docset`, print the usage message instead.
+* Maintenance: run `cargo update`.
+
 ## 9/5/2019 - v0.1.2
 
 * Feature: add the following command line options mimicking `cargo doc`: --features, --no-default-features,
