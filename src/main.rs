@@ -89,6 +89,7 @@ fn main() {
         .bin_name("cargo")
         .subcommand(
             SubCommand::with_name("docset")
+                .about("Generates a docset")
                 .arg(
                     Arg::from_usage("-p, --package <SPEC>...  'Package(s) to document'")
                         .required(false)
@@ -133,10 +134,15 @@ fn main() {
                 )
         )
         .get_matches();
-    let sub_matches = matches.subcommand_matches("docset").unwrap();
-
-    if let Err(e) = run(sub_matches) {
-        eprintln!("{}", e);
+    if let Some(sub_matches) = matches.subcommand_matches("docset") {
+        if let Err(e) = run(sub_matches) {
+            eprintln!("{}", e);
+            exit(1);
+        }
+    }
+    else {
+        println!("Invalid arguments.");
+        println!("{}", matches.usage());
         exit(1);
     }
 }
