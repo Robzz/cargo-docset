@@ -7,7 +7,10 @@ use crate::{
 
 use cargo::{
     core::{compiler::CompileMode, Workspace},
-    ops::{clean, CleanOptions, doc, CompileFilter, CompileOptions, DocOptions, FilterRule, LibRule, Packages},
+    ops::{
+        clean, doc, CleanOptions, CompileFilter, CompileOptions, DocOptions, FilterRule, LibRule,
+        Packages
+    },
     Config as CargoConfig
 };
 use rusqlite::{params, Connection};
@@ -260,28 +263,32 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
         CompileMode::Doc {
             deps: !cfg.no_dependencies
         }
-    ).context(CargoDoc)?;
+    )
+    .context(CargoDoc)?;
     compile_opts.all_features = cfg.all_features;
     compile_opts.no_default_features = cfg.no_default_features;
     compile_opts.features = cfg.features;
     if cfg.lib || cfg.bins.is_some() {
-        let bins_filter_rule =
-            if let Some(bins) = cfg.bins {
-                if bins.is_empty() {
-                    FilterRule::All
-                }
-                else {
-                    FilterRule::Just(bins)
-                }
+        let bins_filter_rule = if let Some(bins) = cfg.bins {
+            if bins.is_empty() {
+                FilterRule::All
+            } else {
+                FilterRule::Just(bins)
             }
-            else { FilterRule::Just(vec![]) };
+        } else {
+            FilterRule::Just(vec![])
+        };
         compile_opts.filter = CompileFilter::Only {
             all_targets: false,
-            lib: if cfg.lib { LibRule::True } else { LibRule::Default },
+            lib: if cfg.lib {
+                LibRule::True
+            } else {
+                LibRule::Default
+            },
             bins: bins_filter_rule,
             examples: FilterRule::Just(vec![]),
             tests: FilterRule::Just(vec![]),
-            benches: FilterRule::Just(vec![]),
+            benches: FilterRule::Just(vec![])
         }
     }
     if cfg.doc_private_items {
@@ -339,7 +346,13 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
     docset_root_dir.push(format!("{}.docset", root_package_name));
 
     if cfg.clean {
-        let clean_options = CleanOptions { config: &cargo_cfg, spec: vec![], target: None, release: false, doc: true };
+        let clean_options = CleanOptions {
+            config: &cargo_cfg,
+            spec: vec![],
+            target: None,
+            release: false,
+            doc: true
+        };
         clean(&workspace, &clean_options).context(CargoClean)?;
     }
     // Good to go, generate the documentation.
