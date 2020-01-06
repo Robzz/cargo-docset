@@ -1,5 +1,9 @@
 # cargo-docset changelog
 
+## 1/6/2020 - v0.1.4
+
+* Bugfix: enable external JavaScript in Info.plist, should fix docsets not rendering properly in Dash.
+
 ## 10/28/2019 - v0.1.3
 
 * Bugfix: don't crash the application when invoked directly as `cargo-docset`, print the usage message instead.
