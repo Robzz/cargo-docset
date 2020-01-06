@@ -84,7 +84,7 @@ fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(
                             } else {
                                 // Package entry
                                 Some(DocsetEntry::new(
-                                    mod_path.to_string(),
+                                    (*mod_path).to_string(),
                                     EntryType::Package,
                                     file_db_path,
                                 ))
