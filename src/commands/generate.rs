@@ -245,6 +245,8 @@ fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str) -> Res
                 <string>{}</string>
             <key>isDashDocset</key>
                 <true/>
+            <key>isJavaScriptEnabled</key>
+                <true/>
         </dict>
         </plist>",
          package_name, package_name, package_name, package_name).context(IoWrite)?;
