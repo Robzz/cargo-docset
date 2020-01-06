@@ -1,7 +1,7 @@
 use cargo::{
-    core::Workspace, util::important_paths::find_root_manifest_for_wd, Config as CargoCfg
+    core::Workspace, util::important_paths::find_root_manifest_for_wd, Config as CargoCfg,
 };
-use clap::{crate_authors, crate_version, App, ArgMatches, Arg, SubCommand};
+use clap::{crate_authors, crate_version, App, Arg, ArgMatches, SubCommand};
 use snafu::ResultExt;
 
 use std::env::current_dir;
@@ -26,16 +26,18 @@ fn run(sub_matches: &ArgMatches) -> Result<()> {
     }
 
     let mut cargo_cfg = CargoCfg::default().context(CargoConfig)?;
-    cargo_cfg.configure(
-        verbosity_level,
-        Some(quiet),
-        &None,
-        sub_matches.is_present("frozen"),
-        sub_matches.is_present("locked"),
-        sub_matches.is_present("offline"),
-        &None,
-        &[]
-    ).context(CargoConfig)?;
+    cargo_cfg
+        .configure(
+            verbosity_level,
+            Some(quiet),
+            &None,
+            sub_matches.is_present("frozen"),
+            sub_matches.is_present("locked"),
+            sub_matches.is_present("offline"),
+            &None,
+            &[],
+        )
+        .context(CargoConfig)?;
 
     let mut cfg = GenerateConfig::default();
     cfg.no_dependencies = sub_matches.is_present("no-deps");
@@ -69,8 +71,7 @@ fn run(sub_matches: &ArgMatches) -> Result<()> {
     }
     if sub_matches.is_present("bins") {
         cfg.bins = Some(vec![])
-    }
-    else if sub_matches.is_present("bin") {
+    } else if sub_matches.is_present("bin") {
         cfg.bins = sub_matches.values_of_lossy("bin");
     }
 
@@ -139,8 +140,7 @@ fn main() {
             eprintln!("{}", e);
             exit(1);
         }
-    }
-    else {
+    } else {
         println!("Invalid arguments.");
         println!("{}", matches.usage());
         exit(1);
