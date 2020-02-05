@@ -2,16 +2,16 @@
 
 use crate::{
     common::{DocsetEntry, EntryType, Package},
-    error::*,
+    error::*
 };
 
 use cargo::{
     core::{compiler::CompileMode, compiler::ProfileKind, Workspace},
     ops::{
         clean, doc, CleanOptions, CompileFilter, CompileOptions, DocOptions, FilterRule, LibRule,
-        Packages,
+        Packages
     },
-    Config as CargoConfig,
+    Config as CargoConfig
 };
 use rusqlite::{params, Connection};
 use snafu::ResultExt;
@@ -21,7 +21,7 @@ use std::{
     ffi::OsStr,
     fs::{copy, create_dir_all, read_dir, remove_dir_all, File},
     io::Write,
-    path::{Path, PathBuf},
+    path::{Path, PathBuf}
 };
 
 #[derive(Debug)]
@@ -35,7 +35,7 @@ pub struct GenerateConfig {
     pub exclude: Vec<String>,
     pub clean: bool,
     pub lib: bool,
-    pub bins: Option<Vec<String>>,
+    pub bins: Option<Vec<String>>
 }
 
 impl Default for GenerateConfig {
@@ -50,7 +50,7 @@ impl Default for GenerateConfig {
             all_features: false,
             clean: true,
             lib: false,
-            bins: None,
+            bins: None
         }
     }
 }
@@ -58,7 +58,7 @@ impl Default for GenerateConfig {
 fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(
     module_path: &Option<&str>,
     rustdoc_root_dir: P1,
-    file_path: P2,
+    file_path: P2
 ) -> Option<DocsetEntry> {
     if file_path.as_ref().extension() == Some(OsStr::new("html")) {
         let file_name = file_path.as_ref().file_name().unwrap().to_string_lossy();
@@ -79,62 +79,62 @@ fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(
                                 Some(DocsetEntry::new(
                                     format!("{}::{}", mod_path, parts[0]),
                                     EntryType::Module,
-                                    file_db_path,
+                                    file_db_path
                                 ))
                             } else {
                                 // Package entry
                                 Some(DocsetEntry::new(
                                     (*mod_path).to_string(),
                                     EntryType::Package,
-                                    file_db_path,
+                                    file_db_path
                                 ))
                             }
                         } else {
                             None
                         }
                     }
-                    _ => None,
+                    _ => None
                 }
             }
             3 => match parts[0] {
                 "const" => Some(DocsetEntry::new(
                     format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
                     EntryType::Constant,
-                    file_db_path,
+                    file_db_path
                 )),
                 "enum" => Some(DocsetEntry::new(
                     format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
                     EntryType::Enum,
-                    file_db_path,
+                    file_db_path
                 )),
                 "fn" => Some(DocsetEntry::new(
                     format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
                     EntryType::Function,
-                    file_db_path,
+                    file_db_path
                 )),
                 "macro" => Some(DocsetEntry::new(
                     format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
                     EntryType::Macro,
-                    file_db_path,
+                    file_db_path
                 )),
                 "trait" => Some(DocsetEntry::new(
                     format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
                     EntryType::Trait,
-                    file_db_path,
+                    file_db_path
                 )),
                 "struct" => Some(DocsetEntry::new(
                     format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
                     EntryType::Struct,
-                    file_db_path,
+                    file_db_path
                 )),
                 "type" => Some(DocsetEntry::new(
                     format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
                     EntryType::Type,
-                    file_db_path,
+                    file_db_path
                 )),
-                _ => None,
+                _ => None
             },
-            _ => None,
+            _ => None
         }
     } else {
         None
@@ -146,7 +146,7 @@ const ROOT_SKIP_DIRS: &[&str] = &["src", "implementors"];
 fn recursive_walk(
     root_dir: &Path,
     cur_dir: &Path,
-    module_path: Option<&str>,
+    module_path: Option<&str>
 ) -> Result<Vec<DocsetEntry>> {
     let dir = read_dir(cur_dir).context(IoRead)?;
     let mut entries = vec![];
@@ -165,7 +165,7 @@ fn recursive_walk(
                 subdir_entries.push(recursive_walk(
                     &root_dir,
                     &dir_entry.path(),
-                    Some(&subdir_module_path),
+                    Some(&subdir_module_path)
                 ));
             }
         } else if let Some(entry) = parse_docset_entry(&module_path, &root_dir, &dir_entry.path()) {
@@ -188,7 +188,7 @@ fn generate_sqlite_index<P: AsRef<Path>>(docset_dir: P, entries: Vec<DocsetEntry
         "CREATE TABLE searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT);
         CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path);
         )",
-        params![],
+        params![]
     )
     .context(Sqlite)?;
     let transaction = conn.transaction().context(Sqlite)?;
@@ -200,7 +200,7 @@ fn generate_sqlite_index<P: AsRef<Path>>(docset_dir: P, entries: Vec<DocsetEntry
             stmt.execute(&[
                 entry.name,
                 entry.ty.to_string(),
-                entry.path.to_str().unwrap().to_owned(),
+                entry.path.to_str().unwrap().to_owned()
             ])
             .context(Sqlite)?;
         }
@@ -263,8 +263,8 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
     let mut compile_opts = CompileOptions::new(
         &cargo_cfg,
         CompileMode::Doc {
-            deps: !cfg.no_dependencies,
-        },
+            deps: !cfg.no_dependencies
+        }
     )
     .context(CargoDoc)?;
     compile_opts.all_features = cfg.all_features;
@@ -290,7 +290,7 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
             bins: bins_filter_rule,
             examples: FilterRule::Just(vec![]),
             tests: FilterRule::Just(vec![]),
-            benches: FilterRule::Just(vec![]),
+            benches: FilterRule::Just(vec![])
         }
     }
     if cfg.doc_private_items {
@@ -335,7 +335,7 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
     };
     if cfg.package != Package::All && !cfg.exclude.is_empty() {
         return Args {
-            msg: "--exclude must be used with --all",
+            msg: "--exclude must be used with --all"
         }
         .fail();
     }
@@ -361,7 +361,7 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
     // Good to go, generate the documentation.
     let doc_cfg = DocOptions {
         open_result: false,
-        compile_opts,
+        compile_opts
     };
     doc(&workspace, &doc_cfg).context(CargoDoc)?;
 
