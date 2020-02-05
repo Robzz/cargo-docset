@@ -6,7 +6,7 @@ use crate::{
 };
 
 use cargo::{
-    core::{compiler::CompileMode, Workspace},
+    core::{compiler::CompileMode, compiler::ProfileKind, Workspace},
     ops::{
         clean, doc, CleanOptions, CompileFilter, CompileOptions, DocOptions, FilterRule, LibRule,
         Packages,
@@ -352,8 +352,9 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
             config: &cargo_cfg,
             spec: vec![],
             target: None,
-            release: false,
             doc: true,
+            profile_specified: false,
+            profile_kind: ProfileKind::Dev
         };
         clean(&workspace, &clean_options).context(CargoClean)?;
     }

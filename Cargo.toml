@@ -16,7 +16,7 @@ maintenance = { status = "experimental" }
 travis-ci = { repository = "Robzz/cargo-docset", branch = "master" }
 
 [dependencies]
-cargo = "0.38"
+cargo = "0.42"
 clap = "2.33"
 derive_more = "0.15"
 failure = "0.1"
