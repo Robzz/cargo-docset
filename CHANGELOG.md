@@ -1,5 +1,9 @@
 # cargo-docset changelog
 
+## 6/19/2020 - v0.1.5
+
+* Maintenance: update cargo to 0.42 (thanks to [@zgotch](https://github.com/zgotsch)) and run cargo update.
+
 ## 1/6/2020 - v0.1.4
 
 * Bugfix: enable external JavaScript in Info.plist, should fix docsets not rendering properly in Dash.
