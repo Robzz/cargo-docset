@@ -1,5 +1,5 @@
 use cargo::{
-    core::Workspace, util::important_paths::find_root_manifest_for_wd, Config as CargoCfg,
+    core::Workspace, util::important_paths::find_root_manifest_for_wd, Config as CargoCfg
 };
 use clap::{crate_authors, crate_version, App, Arg, ArgMatches, SubCommand};
 use snafu::ResultExt;
@@ -35,7 +35,7 @@ fn run(sub_matches: &ArgMatches) -> Result<()> {
             sub_matches.is_present("locked"),
             sub_matches.is_present("offline"),
             &None,
-            &[],
+            &[]
         )
         .context(CargoConfig)?;
 

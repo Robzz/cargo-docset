@@ -7,7 +7,7 @@ pub enum Package {
     All,
     Current,
     Single(String),
-    List(Vec<String>),
+    List(Vec<String>)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,7 +20,7 @@ pub enum EntryType {
     Package, // i.e. crate
     Struct,
     Trait,
-    Type, //Union // Is this even implemented in Rust ?
+    Type //Union // Is this even implemented in Rust ?
 }
 
 impl Display for EntryType {
@@ -34,7 +34,7 @@ impl Display for EntryType {
             EntryType::Package => write!(f, "Package"),
             EntryType::Struct => write!(f, "Struct"),
             EntryType::Trait => write!(f, "Trait"),
-            EntryType::Type => write!(f, "Type"),
+            EntryType::Type => write!(f, "Type")
         }
     }
 }
@@ -43,5 +43,5 @@ impl Display for EntryType {
 pub struct DocsetEntry {
     pub name: String,
     pub ty: EntryType,
-    pub path: PathBuf,
+    pub path: PathBuf
 }
