@@ -363,7 +363,7 @@ pub fn generate(cfg: GenerateConfig) -> Result<()> {
         println!("Running 'cargo clean --doc'...");
         let mut cargo_clean_args = vec!["clean".to_owned()];
         if let Some(ref manifest_path) = &cfg.manifest_path {
-            cargo_clean_args.push("--manifest_path".to_owned());
+            cargo_clean_args.push("--manifest-path".to_owned());
             cargo_clean_args.push(manifest_path.to_owned());
         }
         let cargo_clean_result = Command::new("cargo")
