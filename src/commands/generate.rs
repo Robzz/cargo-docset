@@ -5,53 +5,104 @@ use crate::{
     error::*
 };
 
-use cargo::{
-    core::{compiler::CompileMode, compiler::ProfileKind, Workspace},
-    ops::{
-        clean, doc, CleanOptions, CompileFilter, CompileOptions, DocOptions, FilterRule, LibRule,
-        Packages
-    },
-    Config as CargoConfig
-};
 use rusqlite::{params, Connection};
 use snafu::ResultExt;
+use toml::Value;
 
 use std::{
     borrow::ToOwned,
     ffi::OsStr,
     fs::{copy, create_dir_all, read_dir, remove_dir_all, File},
-    io::Write,
-    path::{Path, PathBuf}
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    process::Command
 };
 
 #[derive(Debug)]
 pub struct GenerateConfig {
+    pub manifest_path: Option<String>,
     pub package: Package,
     pub no_dependencies: bool,
     pub doc_private_items: bool,
     pub features: Vec<String>,
     pub no_default_features: bool,
     pub all_features: bool,
+    pub target: Option<String>,
     pub exclude: Vec<String>,
     pub clean: bool,
     pub lib: bool,
-    pub bins: Option<Vec<String>>
+    pub bin: Vec<String>,
+    pub bins: bool
 }
 
 impl Default for GenerateConfig {
     fn default() -> GenerateConfig {
         GenerateConfig {
+            manifest_path: None,
             package: Package::Current,
             no_dependencies: false,
             doc_private_items: false,
             exclude: Vec::new(),
             features: Vec::new(),
-            no_default_features: true,
+            no_default_features: false,
             all_features: false,
+            target: None,
             clean: true,
             lib: false,
-            bins: None
+            bin: Vec::new(),
+            bins: false
         }
+    }
+}
+
+impl GenerateConfig {
+    fn into_args(self) -> Vec<String> {
+        let mut args = Vec::new();
+        match self.package {
+            Package::Current => {}
+            Package::All => {
+                args.push("--workspace".to_owned());
+            }
+            Package::Single(package_name) => {
+                args.extend_from_slice(&["--package".to_owned(), package_name]);
+            }
+            Package::List(packages) => {
+                for package in packages {
+                    args.extend_from_slice(&["--package".to_owned(), package]);
+                }
+            }
+        }
+        if self.no_dependencies {
+            args.push("--no-deps".to_owned())
+        }
+        if self.doc_private_items {
+            args.push("--document-private-items".to_owned())
+        }
+        if !self.exclude.is_empty() {
+            args.push("--exclude".to_owned());
+            args.extend(self.exclude);
+        }
+        if !self.features.is_empty() {
+            args.push("--features".to_owned());
+            args.extend(self.features);
+        }
+        if self.no_default_features {
+            args.push("--no-default-features".to_owned())
+        }
+        if self.all_features {
+            args.push("--all-features".to_owned())
+        }
+        if let Some(target) = self.target {
+            args.push("--target".to_owned());
+            args.push(target);
+        }
+        if self.lib {
+            args.push("--lib".to_owned());
+        }
+        if self.bins {
+            args.push("bins".to_owned());
+        }
+        args
     }
 }
 
@@ -256,114 +307,90 @@ fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str) -> Res
     Ok(())
 }
 
-pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateConfig) -> Result<()> {
+pub fn generate(cfg: GenerateConfig) -> Result<()> {
     // Step 1: generate rustdoc
     // Figure out for which crate to build the doc and invoke cargo doc.
     // If no crate is specified, run cargo doc for the current crate/workspace.
-    let mut compile_opts = CompileOptions::new(
-        &cargo_cfg,
-        CompileMode::Doc {
-            deps: !cfg.no_dependencies
-        }
-    )
-    .context(CargoDoc)?;
-    compile_opts.all_features = cfg.all_features;
-    compile_opts.no_default_features = cfg.no_default_features;
-    compile_opts.features = cfg.features;
-    if cfg.lib || cfg.bins.is_some() {
-        let bins_filter_rule = if let Some(bins) = cfg.bins {
-            if bins.is_empty() {
-                FilterRule::All
-            } else {
-                FilterRule::Just(bins)
-            }
-        } else {
-            FilterRule::Just(vec![])
-        };
-        compile_opts.filter = CompileFilter::Only {
-            all_targets: false,
-            lib: if cfg.lib {
-                LibRule::True
-            } else {
-                LibRule::Default
-            },
-            bins: bins_filter_rule,
-            examples: FilterRule::Just(vec![]),
-            tests: FilterRule::Just(vec![]),
-            benches: FilterRule::Just(vec![])
-        }
-    }
-    if cfg.doc_private_items {
-        compile_opts.local_rustdoc_args = Some(vec!["--document-private-items".to_owned()]);
-    }
-    let root_package_name = match &cfg.package {
-        Package::All => {
-            if cfg.exclude.is_empty() {
-                compile_opts.spec = Packages::All;
-            } else {
-                compile_opts.spec = Packages::OptOut(cfg.exclude.clone());
-            }
-            workspace
-                .root()
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .to_string()
-        }
-        Package::Current => {
-            compile_opts.spec = Packages::Default;
-            workspace
-                .current()
-                .context(Cargo)?
-                .name()
-                .as_str()
-                .to_owned()
-        }
-        Package::Single(name) => {
-            compile_opts.spec = Packages::Packages(vec![name.clone()]);
-            name.to_owned()
-        }
-        Package::List(packages) => {
-            compile_opts.spec = Packages::Packages(packages.clone());
-            workspace
-                .root()
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .to_string()
-        }
-    };
     if cfg.package != Package::All && !cfg.exclude.is_empty() {
         return Args {
             msg: "--exclude must be used with --all"
         }
         .fail();
     }
+    // Determine the package name that we will use for the generated docset.
+    // If a single package was requested, use this one.
+    // Otherwise, we use the "root" package/workspace name.
+    // TODO: we should probably handle the Package::List case differently. Maybe provide an option
+    // to set the generated docset name ?
+    let package_name = match cfg.package.clone() {
+        Package::Single(package) => package,
+        _ => {
+            let mut manifest_file = File::open(
+                cfg.manifest_path
+                    .clone()
+                    .unwrap_or_else(|| "Cargo.toml".to_owned())
+            )
+            .context(IoRead)?;
+            let mut manifest_contents = String::new();
+            manifest_file
+                .read_to_string(&mut manifest_contents)
+                .context(IoRead)?;
+            let toml_manifest = manifest_contents.parse::<Value>().context(Toml)?;
+            toml_manifest
+                .as_table()
+                .expect("Cargo.toml is not a toml table")
+                .get("package")
+                .expect("Cargo.toml doesn't have a package table")
+                .as_table()
+                .expect("Cargo.toml package entry is not a toml table")
+                .get("name")
+                .expect("Cargo.toml doesn't define a package name")
+                .as_str()
+                .expect("Cargo.toml package.name entry is not a string")
+                .to_owned()
+        }
+    };
     let mut docset_root_dir = PathBuf::new();
-    docset_root_dir.push(workspace.root());
+    docset_root_dir.push("./");
     docset_root_dir.push("target");
     let mut rustdoc_root_dir = docset_root_dir.clone();
     rustdoc_root_dir.push("doc");
     docset_root_dir.push("docset");
-    docset_root_dir.push(format!("{}.docset", root_package_name));
+    docset_root_dir.push(format!("{}.docset", package_name));
 
+    // Clean the documentation directory if so requested
     if cfg.clean {
-        let clean_options = CleanOptions {
-            config: &cargo_cfg,
-            spec: vec![],
-            target: None,
-            doc: true,
-            profile_specified: false,
-            profile_kind: ProfileKind::Dev
-        };
-        clean(&workspace, &clean_options).context(CargoClean)?;
+        println!("Running 'cargo clean --doc'...");
+        let mut cargo_clean_args = vec!["clean".to_owned()];
+        if let Some(ref manifest_path) = &cfg.manifest_path {
+            cargo_clean_args.push("--manifest_path".to_owned());
+            cargo_clean_args.push(manifest_path.to_owned());
+        }
+        let cargo_clean_result = Command::new("cargo")
+            .args(cargo_clean_args)
+            .arg("--doc")
+            .status()
+            .context(Spawn)?;
+        if !cargo_clean_result.success() {
+            return CargoClean {
+                code: cargo_clean_result.code()
+            }
+            .fail();
+        }
     }
     // Good to go, generate the documentation.
-    let doc_cfg = DocOptions {
-        open_result: false,
-        compile_opts
-    };
-    doc(&workspace, &doc_cfg).context(CargoDoc)?;
+    println!("Running 'cargo doc'...");
+    let cargo_doc_result = Command::new("cargo")
+        .arg("doc")
+        .args(cfg.into_args())
+        .status()
+        .context(Spawn)?;
+    if !cargo_doc_result.success() {
+        return CargoDoc {
+            code: cargo_doc_result.code()
+        }
+        .fail();
+    }
 
     // Step 2: iterate over all the html files in the doc directory and parse the filenames
     let entries = recursive_walk(&rustdoc_root_dir, &rustdoc_root_dir, None)?;
@@ -385,7 +412,7 @@ pub fn generate(cargo_cfg: &CargoConfig, workspace: &Workspace, cfg: GenerateCon
     copy_dir_recursive(&rustdoc_root_dir, &docset_hierarchy)?;
 
     // Step 5: add the required metadata
-    write_metadata(&docset_root_dir, &root_package_name)?;
+    write_metadata(&docset_root_dir, &package_name)?;
 
     Ok(())
 }
