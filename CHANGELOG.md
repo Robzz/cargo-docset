@@ -1,5 +1,14 @@
 # cargo-docset changelog
 
+## 6/22/2020 - v0.2.0
+
+* Enhancement: do not depend on cargo anymore. This greatly improves the compile time, and should fix the recurring
+  issues regarding the bundled version of cargo being unable to parse the Cargo.lock file. Drop other dependencies that
+  are not needed anymore as a consequence.
+* Feature: support the `--target` and `--manifest-path` options.
+* Enhancement: enable default features by default, use the `--no-default-features` flag to disable this behavior.
+* Maintenance: update the other dependencies to their latest versions.
+
 ## 6/19/2020 - v0.1.5
 
 * Maintenance: update cargo to 0.42 (thanks to [@zgotch](https://github.com/zgotsch)) and run cargo update.

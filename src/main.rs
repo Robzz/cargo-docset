@@ -1,10 +1,4 @@
-use cargo::{
-    core::Workspace, util::important_paths::find_root_manifest_for_wd, Config as CargoCfg
-};
 use clap::{crate_authors, crate_version, App, Arg, ArgMatches, SubCommand};
-use snafu::ResultExt;
-
-use std::env::current_dir;
 
 mod commands;
 mod common;
@@ -25,28 +19,17 @@ fn run(sub_matches: &ArgMatches) -> Result<()> {
         exit(1);
     }
 
-    let mut cargo_cfg = CargoCfg::default().context(CargoConfig)?;
-    cargo_cfg
-        .configure(
-            verbosity_level,
-            Some(quiet),
-            &None,
-            sub_matches.is_present("frozen"),
-            sub_matches.is_present("locked"),
-            sub_matches.is_present("offline"),
-            &None,
-            &[]
-        )
-        .context(CargoConfig)?;
-
     let mut cfg = GenerateConfig::default();
+    cfg.manifest_path = sub_matches.value_of("manifest-path").map(String::from);
     cfg.no_dependencies = sub_matches.is_present("no-deps");
     cfg.package = if sub_matches.is_present("all") {
         Package::All
     } else if let Some(packages) = sub_matches.values_of_lossy("package") {
-        Package::List(packages)
-    } else if let Some(package) = sub_matches.value_of("package") {
-        Package::Single(package.to_owned())
+        if packages.len() == 1 {
+            Package::Single(packages[0].clone())
+        } else {
+            Package::List(packages)
+        }
     } else {
         Package::Current
     };
@@ -54,32 +37,20 @@ fn run(sub_matches: &ArgMatches) -> Result<()> {
     cfg.exclude = sub_matches
         .values_of_lossy("exclude")
         .unwrap_or_else(Vec::new);
-    if sub_matches.is_present("all-features") {
-        cfg.all_features = true;
-    }
-    if sub_matches.is_present("no-default-features") {
-        cfg.no_default_features = true;
-    }
+    cfg.all_features = sub_matches.is_present("all-features");
+    cfg.no_default_features = sub_matches.is_present("no-default-features");
     if sub_matches.is_present("features") {
         cfg.features = sub_matches.values_of_lossy("features").unwrap();
     }
-    if sub_matches.is_present("no-clean") {
-        cfg.clean = false;
-    }
-    if sub_matches.is_present("lib") {
-        cfg.lib = true;
-    }
-    if sub_matches.is_present("bins") {
-        cfg.bins = Some(vec![])
-    } else if sub_matches.is_present("bin") {
-        cfg.bins = sub_matches.values_of_lossy("bin");
+    cfg.target = sub_matches.value_of("target").map(String::from);
+    cfg.clean = !sub_matches.is_present("no-clean");
+    cfg.lib = sub_matches.is_present("lib");
+    cfg.bins = sub_matches.is_present("bins");
+    if sub_matches.is_present("bin") {
+        cfg.bin = sub_matches.values_of_lossy("bin").unwrap_or_else(Vec::new);
     }
 
-    let cur_dir = current_dir().context(Cwd)?;
-    let root_manifest = find_root_manifest_for_wd(&cur_dir).context(CargoConfig)?;
-    let workspace = Workspace::new(&root_manifest, &cargo_cfg).context(CargoConfig)?;
-
-    generate(&cargo_cfg, &workspace, cfg)
+    generate(cfg)
 }
 
 fn main() {
@@ -94,6 +65,8 @@ fn main() {
                 .arg(
                     Arg::from_usage("-p, --package <SPEC>...  'Package(s) to document'")
                         .required(false)
+                        .takes_value(true)
+                        .multiple(true)
                 )
                 .arg(
                     Arg::from_usage(
@@ -117,6 +90,15 @@ fn main() {
                 )
                 .arg(
                     Arg::from_usage("--features <FEATURES> 'Space separated list of features to activate'")
+                        .multiple(true)
+                        .required(false)
+                )
+                .arg(
+                    Arg::from_usage("--target <TRIPLE> 'Build for the specified target triple'")
+                        .required(false)
+                )
+                .arg(
+                    Arg::from_usage("--manifest-path <PATH> 'Path to Cargo.toml")
                         .required(false)
                 )
                 .args_from_usage(
