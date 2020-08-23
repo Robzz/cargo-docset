@@ -1,33 +1,26 @@
 language: rust
-sudo: required
 cache: cargo
+dist: focal
 
 os:
   - linux
-  #- osx
-  #- windows
 
 rust:
   - stable
   - beta
   - nightly
 
-stage: build and test
-
 addons:
   apt:
     packages:
       - sqlite3
-  #homebrew:
-    #packages:
-      #- sqlite
 
 env:
   global:
     - RUSTFLAGS="-C link-dead-code"
 
-script:
-    - cargo build --verbose
+stage: build and test
+script: cargo build --verbose
 
 jobs:
   allow_failures:
@@ -38,13 +31,11 @@ jobs:
       name: "Clippy"
       addons: { }
       rust: stable
-      cache:
-        cargo: true
-      before_script: rustup component add clippy
+      before_script:
+        - rustup component add clippy
+        - cargo clean -p cargo-docset
       script: cargo clippy -- -D clippy::all
-      after_success:
 
 stages:
-    #- pre-build checks
-    - build and test
-    - static analysis
+  - build and test
+  - static analysis
