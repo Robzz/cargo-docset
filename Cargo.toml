@@ -17,7 +17,7 @@ travis-ci = { repository = "Robzz/cargo-docset", branch = "master" }
 
 [features]
 bundled-sqlite = ["rusqlite/bundled"]
-defaulte = []
+default = []
 
 [dependencies]
 clap = "2.33"
