@@ -1,5 +1,11 @@
 # cargo-docset changelog
 
+## TBD - v0.2.1
+
+* Documentation: mention the dependency on SQLite and link to rusqlite's documentation in the README.
+* Feature: provide the ability to use the SQLite version bundled with rusqlite through the `bundled-sqlite` feature.
+* Maintenance: update `rusqlite` to v0.24.
+
 ## 6/22/2020 - v0.2.0
 
 * Enhancement: do not depend on cargo anymore. This greatly improves the compile time, and should fix the recurring

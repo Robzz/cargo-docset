@@ -15,9 +15,13 @@ categories = ["development-tools", "command-line-utilities"]
 maintenance = { status = "experimental" }
 travis-ci = { repository = "Robzz/cargo-docset", branch = "master" }
 
+[features]
+bundled-sqlite = ["rusqlite/bundled"]
+defaulte = []
+
 [dependencies]
 clap = "2.33"
 derive_more = "0.99"
-rusqlite = "0.23"
+rusqlite = "0.24"
 snafu = "0.6"
 toml = "0.5"
