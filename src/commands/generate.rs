@@ -1,7 +1,7 @@
 //! Implementation of the `generate` command.
 
 use crate::{
-    common::{DocsetEntry, EntryType, Package},
+    common::*,
     error::*
 };
 
@@ -14,7 +14,7 @@ use std::{
     ffi::OsStr,
     fs::{copy, create_dir_all, read_dir, remove_dir_all, File},
     io::{Read, Write},
-    path::{Path, PathBuf},
+    path::Path,
     process::Command
 };
 
@@ -328,7 +328,7 @@ pub fn generate(cfg: GenerateConfig) -> Result<()> {
             let mut manifest_file = File::open(
                 cfg.manifest_path
                     .clone()
-                    .unwrap_or_else(|| "Cargo.toml".to_owned())
+                    .unwrap_or(locate_package_manifest()?)
             )
             .context(IoRead)?;
             let mut manifest_contents = String::new();
@@ -350,8 +350,7 @@ pub fn generate(cfg: GenerateConfig) -> Result<()> {
                 .to_owned()
         }
     };
-    let mut docset_root_dir = PathBuf::new();
-    docset_root_dir.push("./");
+    let mut docset_root_dir = locate_workspace_root()?;
     docset_root_dir.push("target");
     let mut rustdoc_root_dir = docset_root_dir.clone();
     rustdoc_root_dir.push("doc");
@@ -363,7 +362,7 @@ pub fn generate(cfg: GenerateConfig) -> Result<()> {
         println!("Running 'cargo clean --doc'...");
         let mut cargo_clean_args = vec!["clean".to_owned()];
         if let Some(ref manifest_path) = &cfg.manifest_path {
-            cargo_clean_args.push("--manifest_path".to_owned());
+            cargo_clean_args.push("--manifest-path".to_owned());
             cargo_clean_args.push(manifest_path.to_owned());
         }
         let cargo_clean_result = Command::new("cargo")
