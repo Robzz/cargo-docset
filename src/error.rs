@@ -21,11 +21,11 @@ pub enum Error {
     Cwd {
         source: std::io::Error
     },
-    #[snafu(display("I/O error: {}", source))]
+    #[snafu(display("I/O read error: {}", source))]
     IoRead {
         source: std::io::Error
     },
-    #[snafu(display("I/O error: {}", source))]
+    #[snafu(display("I/O write error: {}", source))]
     IoWrite {
         source: std::io::Error
     },
@@ -35,6 +35,9 @@ pub enum Error {
     },
     Sqlite {
         source: rusqlite::Error
+    },
+    Json {
+        source: serde_json::Error
     },
     #[snafu(display("Invalid arguments: {}", msg))]
     Args {

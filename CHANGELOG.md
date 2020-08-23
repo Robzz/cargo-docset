@@ -2,6 +2,7 @@
 
 ## TBD - v0.2.1
 
+* Bugfix: fix detection of the workspace base directory for filesystem operations.
 * Documentation: mention the dependency on SQLite and link to rusqlite's documentation in the README.
 * Feature: provide the ability to use the SQLite version bundled with rusqlite through the `bundled-sqlite` feature.
 * Maintenance: update `rusqlite` to v0.24.
