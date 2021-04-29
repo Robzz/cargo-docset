@@ -40,6 +40,7 @@ fn run(sub_matches: &ArgMatches) -> Result<()> {
         all_features: sub_matches.is_present("all-features"),
         no_default_features: sub_matches.is_present("no-default-features"),
         target: sub_matches.value_of("target").map(String::from),
+        target_dir: sub_matches.value_of("target-dir").map(String::from),
         clean: !sub_matches.is_present("no-clean"),
         lib: sub_matches.is_present("lib"),
         bins: sub_matches.is_present("bins"),
@@ -100,6 +101,10 @@ fn main() {
                 )
                 .arg(
                     Arg::from_usage("--target <TRIPLE> 'Build for the specified target triple'")
+                        .required(false)
+                )
+                .arg(
+                    Arg::from_usage("--target-dir <PATH> 'Override the default target directory'")
                         .required(false)
                 )
                 .arg(

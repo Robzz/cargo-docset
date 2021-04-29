@@ -9,7 +9,6 @@ use std::{
     path::PathBuf,
     process::Command,
     result::Result as StdResult,
-    str::FromStr
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,12 +57,13 @@ pub struct DocsetEntry {
 
 #[derive(Debug, Deserialize)]
 struct ManifestLocation {
-    pub root: String
+    pub root: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct WorkspaceDir {
-    pub workspace_root: String
+pub struct CargoMetadata {
+    pub workspace_root: String,
+    pub target_directory: String,
 }
 
 pub fn locate_package_manifest() -> Result<String> {
@@ -76,12 +76,11 @@ pub fn locate_package_manifest() -> Result<String> {
     Ok(dir.root)
 }
 
-pub fn locate_workspace_root() -> Result<PathBuf> {
-    // Use the cargo `metadata` subcommand to locate the workspace root.
+pub fn get_cargo_metadata() -> Result<CargoMetadata> {
+    // Use the cargo `metadata` subcommand to locate the workspace root and other useful information.
     let cargo_locate_result = Command::new("cargo")
         .args(vec!["metadata", "--no-deps", "--format-version", "1"])
         .output()
         .context(Spawn)?;
-    let dir: WorkspaceDir = serde_json::from_slice(&cargo_locate_result.stdout).context(Json)?;
-    Ok(PathBuf::from_str(&dir.workspace_root).unwrap())
+    serde_json::from_slice::<CargoMetadata>(&cargo_locate_result.stdout).context(Json)
 }
