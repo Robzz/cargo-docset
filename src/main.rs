@@ -19,36 +19,41 @@ fn run(sub_matches: &ArgMatches) -> Result<()> {
         exit(1);
     }
 
-    let mut cfg = GenerateConfig::default();
-    cfg.manifest_path = sub_matches.value_of("manifest-path").map(String::from);
-    cfg.no_dependencies = sub_matches.is_present("no-deps");
-    cfg.package = if sub_matches.is_present("all") {
-        Package::All
-    } else if let Some(packages) = sub_matches.values_of_lossy("package") {
-        if packages.len() == 1 {
-            Package::Single(packages[0].clone())
+    let cfg = GenerateConfig {
+        manifest_path: sub_matches.value_of("manifest-path").map(String::from),
+        no_dependencies: sub_matches.is_present("no-deps"),
+        package: if sub_matches.is_present("all") {
+            Package::All
+        } else if let Some(packages) = sub_matches.values_of_lossy("package") {
+            if packages.len() == 1 {
+                Package::Single(packages[0].clone())
+            } else {
+                Package::List(packages)
+            }
         } else {
-            Package::List(packages)
+            Package::Current
+        },
+        doc_private_items: sub_matches.is_present("document-private-items"),
+        exclude: sub_matches
+            .values_of_lossy("exclude")
+            .unwrap_or_else(Vec::new),
+        all_features: sub_matches.is_present("all-features"),
+        no_default_features: sub_matches.is_present("no-default-features"),
+        target: sub_matches.value_of("target").map(String::from),
+        clean: !sub_matches.is_present("no-clean"),
+        lib: sub_matches.is_present("lib"),
+        bins: sub_matches.is_present("bins"),
+        features: if sub_matches.is_present("features") {
+            sub_matches.values_of_lossy("features").unwrap()
+        } else {
+            Vec::new()
+        },
+        bin: if sub_matches.is_present("bin") {
+            sub_matches.values_of_lossy("bin").unwrap_or_else(Vec::new)
+        } else {
+            Vec::new()
         }
-    } else {
-        Package::Current
     };
-    cfg.doc_private_items = sub_matches.is_present("document-private-items");
-    cfg.exclude = sub_matches
-        .values_of_lossy("exclude")
-        .unwrap_or_else(Vec::new);
-    cfg.all_features = sub_matches.is_present("all-features");
-    cfg.no_default_features = sub_matches.is_present("no-default-features");
-    if sub_matches.is_present("features") {
-        cfg.features = sub_matches.values_of_lossy("features").unwrap();
-    }
-    cfg.target = sub_matches.value_of("target").map(String::from);
-    cfg.clean = !sub_matches.is_present("no-clean");
-    cfg.lib = sub_matches.is_present("lib");
-    cfg.bins = sub_matches.is_present("bins");
-    if sub_matches.is_present("bin") {
-        cfg.bin = sub_matches.values_of_lossy("bin").unwrap_or_else(Vec::new);
-    }
 
     generate(cfg)
 }
