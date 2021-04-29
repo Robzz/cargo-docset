@@ -135,14 +135,14 @@ fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(
                             if mod_path.contains(':') {
                                 // Module entry
                                 Some(DocsetEntry::new(
-                                    format!("{}::{}", mod_path, parts[0]),
+                                    mod_path.to_string(),
                                     EntryType::Module,
                                     file_db_path
                                 ))
                             } else {
                                 // Package entry
                                 Some(DocsetEntry::new(
-                                    (*mod_path).to_string(),
+                                    mod_path.to_string(),
                                     EntryType::Package,
                                     file_db_path
                                 ))
