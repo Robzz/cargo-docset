@@ -277,12 +277,17 @@ fn copy_dir_recursive<Ps: AsRef<Path>, Pd: AsRef<Path>>(src: Ps, dst: Pd) -> Res
     Ok(())
 }
 
-fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str) -> Result<()> {
+fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str, is_virtual_manifest: bool, first_package_name: Option<&str>) -> Result<()> {
     let mut info_plist_path = docset_root_dir.as_ref().to_owned();
     info_plist_path.push("Contents");
     info_plist_path.push("Info.plist");
 
     let mut info_file = File::create(info_plist_path).context(IoWrite)?;
+    let docset_index = if is_virtual_manifest {
+        format!("{}/index.html", first_package_name.unwrap())
+    } else {
+        format!("{}/index.html", package_name)
+    };
     write!(info_file,
         "\
         <?xml version=\"1.0\" encoding=\"UTF-8\"?>
@@ -294,7 +299,7 @@ fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str) -> Res
             <key>CFBundleName</key>
                 <string>{}</string>
             <key>dashIndexFilePath</key>
-                <string>{}/index.html</string>
+                <string>{}</string>
             <key>DocSetPlatformFamily</key>
                 <string>{}</string>
             <key>isDashDocset</key>
@@ -303,7 +308,7 @@ fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str) -> Res
                 <true/>
         </dict>
         </plist>",
-         package_name, package_name, package_name, package_name).context(IoWrite)?;
+         package_name, package_name, docset_index, package_name).context(IoWrite)?;
     Ok(())
 }
 
@@ -322,32 +327,66 @@ pub fn generate(cfg: GenerateConfig) -> Result<()> {
     // Otherwise, we use the "root" package/workspace name.
     // TODO: we should probably handle the Package::List case differently. Maybe provide an option
     // to set the generated docset name ?
+    let mut is_virtual_manifest = false;
+    let mut first_package_name = None;
     let package_name = match cfg.package.clone() {
         Package::Single(package) => package,
         _ => {
-            let mut manifest_file = File::open(
+            let manifest_location =
                 cfg.manifest_path
                     .clone()
-                    .unwrap_or(locate_package_manifest()?)
-            )
-            .context(IoRead)?;
+                    .unwrap_or(locate_package_manifest()?);
+            let mut manifest_file = File::open(&manifest_location)
+                .context(IoRead)?;
             let mut manifest_contents = String::new();
             manifest_file
                 .read_to_string(&mut manifest_contents)
                 .context(IoRead)?;
             let toml_manifest = manifest_contents.parse::<Value>().context(Toml)?;
-            toml_manifest
+            let package_table = toml_manifest
                 .as_table()
                 .expect("Cargo.toml is not a toml table")
-                .get("package")
-                .expect("Cargo.toml doesn't have a package table")
-                .as_table()
-                .expect("Cargo.toml package entry is not a toml table")
-                .get("name")
-                .expect("Cargo.toml doesn't define a package name")
-                .as_str()
-                .expect("Cargo.toml package.name entry is not a string")
-                .to_owned()
+                .get("package");
+            match package_table {
+                Some(toml) => {
+                    toml.as_table()
+                    .expect("Cargo.toml package entry is not a toml table")
+                    .get("name")
+                    .expect("Cargo.toml doesn't define a package name")
+                    .as_str()
+                    .expect("Cargo.toml package.name entry is not a string")
+                    .to_owned()
+                }
+                None => {
+                    is_virtual_manifest = true;
+                    let members = toml_manifest.as_table()
+                        .unwrap()
+                        .get("workspace")
+                        .expect("Manifest has neither a package nor a workspace section")
+                        .as_table()
+                        .expect("Workspace section is not a toml table")
+                        .get("members")
+                        .expect("Workspace section does not have a member field")
+                        .as_array()
+                        .expect("Members field is not an array");
+                    first_package_name = Some(
+                        members
+                            .first()
+                            .expect("Virtual manifest workspace has no members")
+                            .as_str()
+                            .expect("Workspace member is not a string")
+                            .to_owned()
+                    );
+                    let manifest_path = Path::new(&manifest_location);
+                    manifest_path
+                        .parent()
+                        .expect("Manifest parent location is not a directory ???")
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_string()
+                }
+            }
         }
     };
     let mut docset_root_dir = locate_workspace_root()?;
@@ -411,7 +450,9 @@ pub fn generate(cfg: GenerateConfig) -> Result<()> {
     copy_dir_recursive(&rustdoc_root_dir, &docset_hierarchy)?;
 
     // Step 5: add the required metadata
-    write_metadata(&docset_root_dir, &package_name)?;
+    write_metadata(&docset_root_dir, &package_name, is_virtual_manifest, first_package_name.as_deref())?;
+
+    println!("Docset succesfully generated in {}", docset_root_dir.to_string_lossy());
 
     Ok(())
 }
