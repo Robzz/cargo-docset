@@ -14,8 +14,9 @@ use std::{
     ffi::OsStr,
     fs::{copy, create_dir_all, read_dir, remove_dir_all, File},
     io::{Read, Write},
-    path::Path,
-    process::Command
+    path::{Path, PathBuf},
+    process::Command,
+    str::FromStr
 };
 
 #[derive(Debug)]
@@ -389,8 +390,8 @@ pub fn generate(cfg: GenerateConfig) -> Result<()> {
             }
         }
     };
-    let mut docset_root_dir = locate_workspace_root()?;
-    docset_root_dir.push("target");
+    let cargo_metadata = get_cargo_metadata()?;
+    let mut docset_root_dir = PathBuf::from_str(&cargo_metadata.target_directory).unwrap();
     let mut rustdoc_root_dir = docset_root_dir.clone();
     rustdoc_root_dir.push("doc");
     docset_root_dir.push("docset");
