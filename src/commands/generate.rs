@@ -29,6 +29,7 @@ pub struct GenerateConfig {
     pub no_default_features: bool,
     pub all_features: bool,
     pub target: Option<String>,
+    pub target_dir: Option<String>,
     pub exclude: Vec<String>,
     pub clean: bool,
     pub lib: bool,
@@ -48,6 +49,7 @@ impl Default for GenerateConfig {
             no_default_features: false,
             all_features: false,
             target: None,
+            target_dir: None,
             clean: true,
             lib: false,
             bin: Vec::new(),
@@ -96,6 +98,10 @@ impl GenerateConfig {
         if let Some(target) = self.target {
             args.push("--target".to_owned());
             args.push(target);
+        }
+        if let Some(target_dir) = self.target_dir {
+            args.push("--target-dir".to_owned());
+            args.push(target_dir);
         }
         if self.lib {
             args.push("--lib".to_owned());
@@ -391,11 +397,12 @@ pub fn generate(cfg: GenerateConfig) -> Result<()> {
         }
     };
     let cargo_metadata = get_cargo_metadata()?;
-    let mut docset_root_dir = PathBuf::from_str(&cargo_metadata.target_directory).unwrap();
-    let mut rustdoc_root_dir = docset_root_dir.clone();
+    let docset_root_dir = cfg.target_dir.as_deref().unwrap_or(&cargo_metadata.target_directory);
+    let mut docset_root_dir_path = PathBuf::from_str(docset_root_dir).unwrap();
+    let mut rustdoc_root_dir = docset_root_dir_path.clone();
     rustdoc_root_dir.push("doc");
-    docset_root_dir.push("docset");
-    docset_root_dir.push(format!("{}.docset", package_name));
+    docset_root_dir_path.push("docset");
+    docset_root_dir_path.push(format!("{}.docset", package_name));
 
     // Clean the documentation directory if so requested
     if cfg.clean {
@@ -437,23 +444,23 @@ pub fn generate(cfg: GenerateConfig) -> Result<()> {
     // Step 3: generate the SQLite database
     // At this point, we need to start writing into the output docset directory, so create the
     // hirerarchy, and clean it first if it already exists.
-    if docset_root_dir.exists() {
-        remove_dir_all(&docset_root_dir).context(IoWrite)?;
+    if docset_root_dir_path.exists() {
+        remove_dir_all(&docset_root_dir_path).context(IoWrite)?;
     }
-    let mut docset_hierarchy = docset_root_dir.clone();
+    let mut docset_hierarchy = docset_root_dir_path.clone();
     docset_hierarchy.push("Contents");
     docset_hierarchy.push("Resources");
     create_dir_all(&docset_hierarchy).context(IoWrite)?;
-    generate_sqlite_index(&docset_root_dir, entries)?;
+    generate_sqlite_index(&docset_root_dir_path, entries)?;
 
     // Step 4: Copy the rustdoc to the docset directory
     docset_hierarchy.push("Documents");
     copy_dir_recursive(&rustdoc_root_dir, &docset_hierarchy)?;
 
     // Step 5: add the required metadata
-    write_metadata(&docset_root_dir, &package_name, is_virtual_manifest, first_package_name.as_deref())?;
+    write_metadata(&docset_root_dir_path, &package_name, is_virtual_manifest, first_package_name.as_deref())?;
 
-    println!("Docset succesfully generated in {}", docset_root_dir.to_string_lossy());
+    println!("Docset succesfully generated in {}", docset_root_dir_path.to_string_lossy());
 
     Ok(())
 }
