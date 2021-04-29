@@ -248,7 +248,7 @@ fn generate_sqlite_index<P: AsRef<Path>>(docset_dir: P, entries: Vec<DocsetEntry
             .prepare("INSERT INTO searchIndex (name, type, path) VALUES (?1, ?2, ?3)")
             .context(Sqlite)?;
         for entry in entries {
-            stmt.execute(&[
+            stmt.execute([
                 entry.name,
                 entry.ty.to_string(),
                 entry.path.to_str().unwrap().to_owned()
