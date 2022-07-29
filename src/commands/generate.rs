@@ -1,11 +1,6 @@
 //! Implementation of the `docset` subcommand.
 
-use crate::{
-    common::*,
-    error::*,
-    io::*,
-    DocsetParams
-};
+use crate::{common::*, error::*, io::*, DocsetParams};
 
 use cargo_metadata::Metadata;
 use rusqlite::{params, Connection};
@@ -193,9 +188,9 @@ fn copy_dir_recursive<Ps: AsRef<Path>, Pd: AsRef<Path>>(src: Ps, dst: Pd) -> Res
 
 fn write_metadata<P: AsRef<Path>>(
     docset_root_dir: P,
-    package_name: &str,
+    docset_name: &str,
     index_package: Option<String>,
-    docset_identifier: Option<String>
+    platform_family: Option<String>
 ) -> Result<()> {
     let mut info_plist_path = docset_root_dir.as_ref().to_owned();
     info_plist_path.push("Contents");
@@ -211,11 +206,21 @@ fn write_metadata<P: AsRef<Path>>(
     } else {
         String::new()
     };
-    let identifier_entry = if let Some(docset_identifier) = docset_identifier {
+    let identifier_entry = if let Some(platform_family) = &platform_family {
         format!(
             "<key>CFBundleIdentifier</key>
                     <string>{}</string>",
-            docset_identifier
+            platform_family
+        )
+    } else {
+        String::new()
+    };
+
+    let platform_family_entry = if let Some(platform_family) = &platform_family {
+        format!(
+            "<key>DocSetPlatformFamily</key>
+                    <string>{}</string>",
+            platform_family
         )
     } else {
         String::new()
@@ -227,19 +232,18 @@ fn write_metadata<P: AsRef<Path>>(
         <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
         <plist version=\"1.0\">
         <dict>
-            {0}
+            {}
             <key>CFBundleName</key>
-                <string>{1}</string>
-            {2}
-            <key>DocSetPlatformFamily</key>
-                <string>{0}</string>
+                <string>{}</string>
+            {}
+            {}
             <key>isDashDocset</key>
                 <true/>
             <key>isJavaScriptEnabled</key>
                 <true/>
         </dict>
         </plist>",
-        identifier_entry, package_name, index_entry).context(IoWriteSnafu)?;
+        identifier_entry, docset_name, index_entry, platform_family_entry).context(IoWriteSnafu)?;
     Ok(())
 }
 
@@ -281,11 +285,11 @@ fn get_docset_index(cfg: &DocsetParams, metadata: &Metadata) -> Option<String> {
     }
 }
 
-/// Return identifier that should be used for the docset, if any.
+/// Return the keywork that should be used for the docset platform family, if any.
 /// This uses the same rules as docset name selection, except no identifier is a valid option.
-fn get_docset_identifier(cfg: &DocsetParams, metadata: &Metadata) -> Option<String> {
-    if let Some(identifier) = &cfg.docset_identifier {
-        return Some(identifier.to_owned());
+fn get_docset_platform_family(cfg: &DocsetParams, metadata: &Metadata) -> Option<String> {
+    if let Some(platform_family) = &cfg.platform_family {
+        return Some(platform_family.to_owned());
     }
 
     match (cfg.workspace.all, cfg.workspace.package.len()) {
@@ -331,9 +335,11 @@ pub fn generate_docset(cfg: DocsetParams) -> Result<()> {
     }
     // Good to go, generate the documentation.
     println!("Running 'cargo doc'...");
+    let args = cfg.clone().into_args();
+    dbg!(&args);
     let cargo_doc_result = Command::new("cargo")
         .arg("doc")
-        .args(cfg.clone().into_args())
+        .args(args)
         .status()
         .context(SpawnSnafu)?;
     if !cargo_doc_result.success() {
@@ -352,7 +358,8 @@ pub fn generate_docset(cfg: DocsetParams) -> Result<()> {
     let mut rustdoc_root_dir = docset_root_dir.clone();
     rustdoc_root_dir.push("doc");
     docset_root_dir.push("docset");
-    docset_root_dir.push(format!("{}.docset", docset_name));
+    let docset_identifier = get_docset_platform_family(&cfg, &cargo_metadata);
+    docset_root_dir.push(format!("{}.docset", docset_identifier.clone().unwrap_or("generated-docset.docset".to_owned())));
     let entries = recursive_walk(&rustdoc_root_dir, &rustdoc_root_dir, None)?;
 
     // Step 3: generate the SQLite database
@@ -372,7 +379,6 @@ pub fn generate_docset(cfg: DocsetParams) -> Result<()> {
     copy_dir_recursive(&rustdoc_root_dir, &docset_hierarchy)?;
 
     // Step 5: add the required metadata
-    let docset_identifier = get_docset_identifier(&cfg, &cargo_metadata);
     if docset_identifier.is_none() {
         warn("no docset identifier was provided and none could be generated, consider adding the '--docset-identifier' option.");
     }

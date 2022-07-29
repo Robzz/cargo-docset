@@ -7,7 +7,7 @@
 * Feature: add `--target-dir` option and respect `CARGO_TARGET_DIR` environment variable and `build.target_dir` config.
 * Feature: add the `--docset-name` option in order to specify or override the docset name.
 * Feature: add the `--docset-index` option in order to specify or override the docset index package.
-* Feature: add the `--docset-identifier` option in order to specify or override the docset identifier string.
+* Feature: add the `--platform-family` option in order to specify or override the docset platform family string.
 * Feature: add the enabled by default `color` cargo feature which can be disabled to turn off colored terminal output.
 * Refactored: use the [cargo-metadata](https://crates.io/crates/cargo_metadata) crate to obtain the workspace metadata,
   replace hand-rolled mechanisms.

@@ -57,9 +57,9 @@ pub struct DocsetParams {
     /// Specify or override the package whose index will be used as the docset index page.
     pub docset_index: Option<String>,
     #[clap(long, value_parser)]
-    /// Specify or override the docset identifier (used to specify which docset to search in docset
-    /// browser search bars).
-    pub docset_identifier: Option<String>
+    /// Specify or override the docset platform family (used to specify the keyword used to search
+    /// this specific docset in documentation browsers).
+    pub platform_family: Option<String>
 }
 
 impl DocsetParams {
