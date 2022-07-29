@@ -33,9 +33,11 @@ pub enum Error {
     IoWrite {
         source: std::io::Error
     },
+    #[snafu(display("SQLite error {}", source))]
     Sqlite {
         source: rusqlite::Error
     },
+    #[snafu(display("CLI arguments error: {}", msg))]
     Args {
         msg: &'static str
     }

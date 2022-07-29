@@ -2,21 +2,23 @@
 
 use crate::{
     common::*,
-    error::*, DocsetParams
+    error::*,
+    io::*,
+    DocsetParams
 };
 
 use cargo_metadata::Metadata;
 use rusqlite::{params, Connection};
-use snafu::{ResultExt, ensure};
+use snafu::{ensure, ResultExt};
 
 use std::{
     borrow::ToOwned,
     ffi::OsStr,
     fs::{copy, create_dir_all, read_dir, remove_dir_all, File},
     io::Write,
-    path::Path, process::Command,
+    path::Path,
+    process::Command
 };
-
 
 fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(
     module_path: &Option<&str>,
@@ -189,17 +191,33 @@ fn copy_dir_recursive<Ps: AsRef<Path>, Pd: AsRef<Path>>(src: Ps, dst: Pd) -> Res
     Ok(())
 }
 
-fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str, index_package: Option<String>) -> Result<()> {
+fn write_metadata<P: AsRef<Path>>(
+    docset_root_dir: P,
+    package_name: &str,
+    index_package: Option<String>,
+    docset_identifier: Option<String>
+) -> Result<()> {
     let mut info_plist_path = docset_root_dir.as_ref().to_owned();
     info_plist_path.push("Contents");
     info_plist_path.push("Info.plist");
 
     let mut info_file = File::create(info_plist_path).context(IoWriteSnafu)?;
     let index_entry = if let Some(index_package) = index_package {
-        format!("<key>dashIndexFilePath</key>
-                    <string>{0}</string> {0}/index.html", index_package)
-    }
-    else {
+        format!(
+            "<key>dashIndexFilePath</key>
+                    <string>{}/index.html</string>",
+            index_package
+        )
+    } else {
+        String::new()
+    };
+    let identifier_entry = if let Some(docset_identifier) = docset_identifier {
+        format!(
+            "<key>CFBundleIdentifier</key>
+                    <string>{}</string>",
+            docset_identifier
+        )
+    } else {
         String::new()
     };
 
@@ -209,20 +227,19 @@ fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str, index_
         <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
         <plist version=\"1.0\">
         <dict>
-            <key>CFBundleIdentifier</key>
-                <string>{}</string>
+            {0}
             <key>CFBundleName</key>
-                <string>{}</string>
-            {}
+                <string>{1}</string>
+            {2}
             <key>DocSetPlatformFamily</key>
-                <string>{}</string>
+                <string>{0}</string>
             <key>isDashDocset</key>
                 <true/>
             <key>isJavaScriptEnabled</key>
                 <true/>
         </dict>
         </plist>",
-         package_name, package_name, index_entry, package_name).context(IoWriteSnafu)?;
+        identifier_entry, package_name, index_entry).context(IoWriteSnafu)?;
     Ok(())
 }
 
@@ -243,9 +260,9 @@ fn get_docset_name(cfg: &DocsetParams, metadata: &Metadata) -> String {
         _ => {
             if let Some(root_package) = metadata.root_package() {
                 root_package.name.to_owned()
-            }
-            else {
-                metadata.workspace_root.as_path().file_name().unwrap().to_owned()
+            } else {
+                let package_list = cfg.workspace.package.join(", ");
+                format!("Docset for packages {}", package_list)
             }
         }
     }
@@ -260,9 +277,20 @@ fn get_docset_index(cfg: &DocsetParams, metadata: &Metadata) -> Option<String> {
 
     match (cfg.workspace.all, cfg.workspace.package.len()) {
         (false, 1) => Some(cfg.workspace.package[0].to_owned()),
-        _ => {
-            metadata.root_package().map(|p| p.name.to_owned())
-        }
+        _ => metadata.root_package().map(|p| p.name.to_owned())
+    }
+}
+
+/// Return identifier that should be used for the docset, if any.
+/// This uses the same rules as docset name selection, except no identifier is a valid option.
+fn get_docset_identifier(cfg: &DocsetParams, metadata: &Metadata) -> Option<String> {
+    if let Some(identifier) = &cfg.docset_identifier {
+        return Some(identifier.to_owned());
+    }
+
+    match (cfg.workspace.all, cfg.workspace.package.len()) {
+        (false, 1) => Some(cfg.workspace.package[0].to_owned()),
+        _ => metadata.root_package().map(|p| p.name.to_owned())
     }
 }
 
@@ -270,7 +298,14 @@ pub fn generate_docset(cfg: DocsetParams) -> Result<()> {
     // Step 1: generate rustdoc
     // Figure out for which crate to build the doc and invoke cargo doc.
     // If no crate is specified, run cargo doc for the current crate/workspace.
-    ensure!(!cfg.workspace.all && !cfg.workspace.exclude.is_empty(), ArgsSnafu { msg: "--exclude must be used with --all" });
+    if cfg.workspace.all {
+        ensure!(
+            cfg.workspace.exclude.is_empty(),
+            ArgsSnafu {
+                msg: "--exclude must be used with --all"
+            }
+        );
+    }
 
     let cargo_metadata = cfg.manifest.metadata().exec().context(CargoMetadataSnafu)?;
 
@@ -310,7 +345,10 @@ pub fn generate_docset(cfg: DocsetParams) -> Result<()> {
 
     // Step 2: iterate over all the html files in the doc directory and parse the filenames
     let docset_name = get_docset_name(&cfg, &cargo_metadata);
-    let mut docset_root_dir = cfg.target_dir.clone().unwrap_or_else(|| cargo_metadata.target_directory.clone().into_std_path_buf());
+    let mut docset_root_dir = cfg
+        .target_dir
+        .clone()
+        .unwrap_or_else(|| cargo_metadata.target_directory.clone().into_std_path_buf());
     let mut rustdoc_root_dir = docset_root_dir.clone();
     rustdoc_root_dir.push("doc");
     docset_root_dir.push("docset");
@@ -334,16 +372,22 @@ pub fn generate_docset(cfg: DocsetParams) -> Result<()> {
     copy_dir_recursive(&rustdoc_root_dir, &docset_hierarchy)?;
 
     // Step 5: add the required metadata
-    write_metadata(&docset_root_dir, &docset_name, get_docset_index(&cfg, &cargo_metadata))?;
+    let docset_identifier = get_docset_identifier(&cfg, &cargo_metadata);
+    if docset_identifier.is_none() {
+        warn("no docset identifier was provided and none could be generated, consider adding the '--docset-identifier' option.");
+    }
 
-    println!("Docset succesfully generated in {}", docset_root_dir.to_string_lossy());
+    write_metadata(
+        &docset_root_dir,
+        &docset_name,
+        get_docset_index(&cfg, &cargo_metadata),
+        docset_identifier
+    )?;
+
+    println!(
+        "Docset succesfully generated in {}",
+        docset_root_dir.to_string_lossy()
+    );
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_config_into_args() {
-    }
 }

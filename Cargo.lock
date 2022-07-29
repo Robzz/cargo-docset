@@ -49,12 +49,14 @@ dependencies = [
 name = "cargo-docset"
 version = "0.2.1"
 dependencies = [
+ "atty",
  "cargo_metadata",
  "clap",
  "clap-cargo",
  "derive_more",
  "rusqlite",
  "snafu",
+ "termcolor",
 ]
 
 [[package]]

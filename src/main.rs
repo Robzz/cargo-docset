@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand, Args};
 mod commands;
 mod common;
 mod error;
+mod io;
 
 use crate::error::*;
 use commands::generate::generate_docset;
@@ -54,7 +55,11 @@ pub struct DocsetParams {
     pub docset_name: Option<String>,
     #[clap(long, value_parser)]
     /// Specify or override the package whose index will be used as the docset index page.
-    pub docset_index: Option<String>
+    pub docset_index: Option<String>,
+    #[clap(long, value_parser)]
+    /// Specify or override the docset identifier (used to specify which docset to search in docset
+    /// browser search bars).
+    pub docset_identifier: Option<String>
 }
 
 impl DocsetParams {
@@ -118,7 +123,16 @@ fn run(cli: Cli) -> Result<()> {
     }
 }
 
-fn main() -> Result<()> {
+fn main() {
     let cli = Cli::parse();
-    run(cli)
+    if let Err(e) = run(cli) {
+        io::error(&e.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_config_into_args() {
+    }
 }
