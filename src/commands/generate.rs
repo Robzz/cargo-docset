@@ -1,8 +1,8 @@
-//! Implementation of the `generate` command.
+//! Implementation of the `docset` subcommand.
 
 use crate::{
     common::*,
-    error::*
+    error::*, DocsetParams
 };
 
 use cargo_metadata::Metadata;
@@ -14,74 +14,9 @@ use std::{
     ffi::OsStr,
     fs::{copy, create_dir_all, read_dir, remove_dir_all, File},
     io::Write,
-    path::{Path, PathBuf}, process::Command,
+    path::Path, process::Command,
 };
 
-#[derive(Default, Debug, Clone)]
-pub struct GenerateConfig {
-    pub manifest: clap_cargo::Manifest,
-    pub workspace: clap_cargo::Workspace,
-    pub no_dependencies: bool,
-    pub doc_private_items: bool,
-    pub features: Vec<String>,
-    pub no_default_features: bool,
-    pub all_features: bool,
-    pub target: Option<String>,
-    pub target_dir: Option<PathBuf>,
-    pub no_clean: bool,
-    pub lib: bool,
-    pub bin: Vec<String>,
-    pub bins: bool,
-    pub docset_name: Option<String>,
-    pub docset_index: Option<String>
-}
-
-impl GenerateConfig {
-    fn into_args(self) -> Vec<String> {
-        let mut args = Vec::new();
-        if self.workspace.all {
-            args.push("--workspace".to_owned());
-            for exclude in self.workspace.exclude {
-                args.extend_from_slice(&["--exclude".to_owned(), exclude]);
-            }
-        } else {
-            for package in self.workspace.package {
-                args.extend_from_slice(&["--package".to_owned(), package]);
-            }
-        }
-        if self.no_dependencies {
-            args.push("--no-deps".to_owned())
-        }
-        if self.doc_private_items {
-            args.push("--document-private-items".to_owned())
-        }
-        if !self.features.is_empty() {
-            args.push("--features".to_owned());
-            args.extend(self.features);
-        }
-        if self.no_default_features {
-            args.push("--no-default-features".to_owned())
-        }
-        if self.all_features {
-            args.push("--all-features".to_owned())
-        }
-        if let Some(target) = self.target {
-            args.push("--target".to_owned());
-            args.push(target);
-        }
-        if let Some(target_dir) = self.target_dir {
-            args.push("--target-dir".to_owned());
-            args.push(target_dir.to_string_lossy().to_string());
-        }
-        if self.lib {
-            args.push("--lib".to_owned());
-        }
-        if self.bins {
-            args.push("bins".to_owned());
-        }
-        args
-    }
-}
 
 fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(
     module_path: &Option<&str>,
@@ -297,8 +232,12 @@ fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str, index_
 ///   * If a single package was requested, use this one.
 ///   * Otherwise, if there is a workspace root package and we have been asked to generate
 ///     documentation for it, use this one.
-///   * Otherwise, fail with an error requesting to supply a name ?
-fn get_docset_name(cfg: &GenerateConfig, metadata: &Metadata) -> String {
+///   * Otherwise, generate a name from the list of workspace member packages being built.
+fn get_docset_name(cfg: &DocsetParams, metadata: &Metadata) -> String {
+    if let Some(docset_name) = &cfg.docset_name {
+        return docset_name.to_owned();
+    }
+
     match (cfg.workspace.all, cfg.workspace.package.len()) {
         (false, 1) => cfg.workspace.package[0].to_owned(),
         _ => {
@@ -314,7 +253,7 @@ fn get_docset_name(cfg: &GenerateConfig, metadata: &Metadata) -> String {
 
 /// Return the name of the package that should be used for the docset index, if any.
 /// This uses the same rules as docset name selection, except no index is a valid option.
-fn get_docset_index(cfg: &GenerateConfig, metadata: &Metadata) -> Option<String> {
+fn get_docset_index(cfg: &DocsetParams, metadata: &Metadata) -> Option<String> {
     if cfg.docset_index.is_some() {
         return cfg.docset_index.clone();
     }
@@ -327,7 +266,7 @@ fn get_docset_index(cfg: &GenerateConfig, metadata: &Metadata) -> Option<String>
     }
 }
 
-pub fn generate(cfg: GenerateConfig) -> Result<()> {
+pub fn generate_docset(cfg: DocsetParams) -> Result<()> {
     // Step 1: generate rustdoc
     // Figure out for which crate to build the doc and invoke cargo doc.
     // If no crate is specified, run cargo doc for the current crate/workspace.
