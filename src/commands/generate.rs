@@ -17,7 +17,7 @@ use std::{
     path::{Path, PathBuf}, process::Command,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct GenerateConfig {
     pub manifest: clap_cargo::Manifest,
     pub workspace: clap_cargo::Workspace,
@@ -34,28 +34,6 @@ pub struct GenerateConfig {
     pub bins: bool,
     pub docset_name: Option<String>,
     pub docset_index: Option<String>
-}
-
-impl Default for GenerateConfig {
-    fn default() -> GenerateConfig {
-        GenerateConfig {
-            manifest: clap_cargo::Manifest::default(),
-            workspace: clap_cargo::Workspace::default(),
-            no_dependencies: false,
-            doc_private_items: false,
-            features: Vec::new(),
-            no_default_features: false,
-            all_features: false,
-            target: None,
-            target_dir: None,
-            no_clean: false,
-            lib: false,
-            bin: Vec::new(),
-            bins: false,
-            docset_name: None,
-            docset_index: None
-        }
-    }
 }
 
 impl GenerateConfig {
@@ -148,37 +126,37 @@ fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(
             }
             3 => match parts[0] {
                 "const" => Some(DocsetEntry::new(
-                    format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
+                    format!("{}::{}", module_path.unwrap(), parts[1]),
                     EntryType::Constant,
                     file_db_path
                 )),
                 "enum" => Some(DocsetEntry::new(
-                    format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
+                    format!("{}::{}", module_path.unwrap(), parts[1]),
                     EntryType::Enum,
                     file_db_path
                 )),
                 "fn" => Some(DocsetEntry::new(
-                    format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
+                    format!("{}::{}", module_path.unwrap(), parts[1]),
                     EntryType::Function,
                     file_db_path
                 )),
                 "macro" => Some(DocsetEntry::new(
-                    format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
+                    format!("{}::{}", module_path.unwrap(), parts[1]),
                     EntryType::Macro,
                     file_db_path
                 )),
                 "trait" => Some(DocsetEntry::new(
-                    format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
+                    format!("{}::{}", module_path.unwrap(), parts[1]),
                     EntryType::Trait,
                     file_db_path
                 )),
                 "struct" => Some(DocsetEntry::new(
-                    format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
+                    format!("{}::{}", module_path.unwrap(), parts[1]),
                     EntryType::Struct,
                     file_db_path
                 )),
                 "type" => Some(DocsetEntry::new(
-                    format!("{}::{}", module_path.unwrap().to_string(), parts[1]),
+                    format!("{}::{}", module_path.unwrap(), parts[1]),
                     EntryType::Type,
                     file_db_path
                 )),
@@ -213,7 +191,7 @@ fn recursive_walk(
             if !(module_path.is_none() && ROOT_SKIP_DIRS.contains(&dir_name.as_str())) {
                 subdir_module_path.push_str(&dir_name);
                 subdir_entries.push(recursive_walk(
-                    &root_dir,
+                    root_dir,
                     &dir_entry.path(),
                     Some(&subdir_module_path)
                 ));
@@ -344,12 +322,7 @@ fn get_docset_index(cfg: &GenerateConfig, metadata: &Metadata) -> Option<String>
     match (cfg.workspace.all, cfg.workspace.package.len()) {
         (false, 1) => Some(cfg.workspace.package[0].to_owned()),
         _ => {
-            if let Some(root_package) = metadata.root_package() {
-                Some(root_package.name.to_owned())
-            }
-            else {
-                None
-            }
+            metadata.root_package().map(|p| p.name.to_owned())
         }
     }
 }
@@ -358,7 +331,7 @@ pub fn generate(cfg: GenerateConfig) -> Result<()> {
     // Step 1: generate rustdoc
     // Figure out for which crate to build the doc and invoke cargo doc.
     // If no crate is specified, run cargo doc for the current crate/workspace.
-    ensure!(!(cfg.workspace.all && !cfg.workspace.exclude.is_empty()), ArgsSnafu { msg: "--exclude must be used with --all" });
+    ensure!(!cfg.workspace.all && !cfg.workspace.exclude.is_empty(), ArgsSnafu { msg: "--exclude must be used with --all" });
 
     let cargo_metadata = cfg.manifest.metadata().exec().context(CargoMetadataSnafu)?;
 
@@ -398,7 +371,7 @@ pub fn generate(cfg: GenerateConfig) -> Result<()> {
 
     // Step 2: iterate over all the html files in the doc directory and parse the filenames
     let docset_name = get_docset_name(&cfg, &cargo_metadata);
-    let mut docset_root_dir = cfg.target_dir.clone().unwrap_or(cargo_metadata.target_directory.clone().into_std_path_buf());
+    let mut docset_root_dir = cfg.target_dir.clone().unwrap_or_else(|| cargo_metadata.target_directory.clone().into_std_path_buf());
     let mut rustdoc_root_dir = docset_root_dir.clone();
     rustdoc_root_dir.push("doc");
     docset_root_dir.push("docset");

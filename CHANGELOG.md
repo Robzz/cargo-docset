@@ -7,8 +7,10 @@
 * Feature: add `--target-dir` option and respect `CARGO_TARGET_DIR` environment variable and `build.target_dir` config.
 * Feature: add the `--docset-name` option in order to specify or override the docset name.
 * Feature: add the `--docset-index` option in order to specify or override the docset index package.
-* Refactored: use the [cargo-metadata](https://crates.io/crates/cargo_metadata) crate to obtain the workspace metadata, replace hand-rolled mechanisms.
+* Refactored: use the [cargo-metadata](https://crates.io/crates/cargo_metadata) crate to obtain the workspace metadata,
+  replace hand-rolled mechanisms.
 * Maintenance: update dependencies to their latest versions.
+* Maintenance: update to Rust edition 2021.
 
 ## 8/23/2020 - v0.2.1
 
