@@ -5,46 +5,43 @@ use crate::{
     error::*
 };
 
+use cargo_metadata::Metadata;
 use rusqlite::{params, Connection};
-use snafu::ResultExt;
-use toml::Value;
+use snafu::{ResultExt, ensure};
 
 use std::{
     borrow::ToOwned,
     ffi::OsStr,
     fs::{copy, create_dir_all, read_dir, remove_dir_all, File},
-    io::{Read, Write},
-    path::{Path, PathBuf},
-    process::Command,
-    str::FromStr
+    io::Write,
+    path::{Path, PathBuf}, process::Command,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GenerateConfig {
-    pub manifest_path: Option<String>,
-    pub package: Package,
+    pub manifest: clap_cargo::Manifest,
+    pub workspace: clap_cargo::Workspace,
     pub no_dependencies: bool,
     pub doc_private_items: bool,
     pub features: Vec<String>,
     pub no_default_features: bool,
     pub all_features: bool,
     pub target: Option<String>,
-    pub target_dir: Option<String>,
-    pub exclude: Vec<String>,
+    pub target_dir: Option<PathBuf>,
     pub clean: bool,
     pub lib: bool,
     pub bin: Vec<String>,
-    pub bins: bool
+    pub bins: bool,
+    pub docset_name: Option<String>
 }
 
 impl Default for GenerateConfig {
     fn default() -> GenerateConfig {
         GenerateConfig {
-            manifest_path: None,
-            package: Package::Current,
+            manifest: clap_cargo::Manifest::default(),
+            workspace: clap_cargo::Workspace::default(),
             no_dependencies: false,
             doc_private_items: false,
-            exclude: Vec::new(),
             features: Vec::new(),
             no_default_features: false,
             all_features: false,
@@ -53,7 +50,8 @@ impl Default for GenerateConfig {
             clean: true,
             lib: false,
             bin: Vec::new(),
-            bins: false
+            bins: false,
+            docset_name: None
         }
     }
 }
@@ -61,18 +59,14 @@ impl Default for GenerateConfig {
 impl GenerateConfig {
     fn into_args(self) -> Vec<String> {
         let mut args = Vec::new();
-        match self.package {
-            Package::Current => {}
-            Package::All => {
-                args.push("--workspace".to_owned());
+        if self.workspace.all {
+            args.push("--workspace".to_owned());
+            for exclude in self.workspace.exclude {
+                args.extend_from_slice(&["--exclude".to_owned(), exclude]);
             }
-            Package::Single(package_name) => {
-                args.extend_from_slice(&["--package".to_owned(), package_name]);
-            }
-            Package::List(packages) => {
-                for package in packages {
-                    args.extend_from_slice(&["--package".to_owned(), package]);
-                }
+        } else {
+            for package in self.workspace.package {
+                args.extend_from_slice(&["--package".to_owned(), package]);
             }
         }
         if self.no_dependencies {
@@ -80,10 +74,6 @@ impl GenerateConfig {
         }
         if self.doc_private_items {
             args.push("--document-private-items".to_owned())
-        }
-        if !self.exclude.is_empty() {
-            args.push("--exclude".to_owned());
-            args.extend(self.exclude);
         }
         if !self.features.is_empty() {
             args.push("--features".to_owned());
@@ -101,7 +91,7 @@ impl GenerateConfig {
         }
         if let Some(target_dir) = self.target_dir {
             args.push("--target-dir".to_owned());
-            args.push(target_dir);
+            args.push(target_dir.to_string_lossy().to_string());
         }
         if self.lib {
             args.push("--lib".to_owned());
@@ -206,7 +196,7 @@ fn recursive_walk(
     cur_dir: &Path,
     module_path: Option<&str>
 ) -> Result<Vec<DocsetEntry>> {
-    let dir = read_dir(cur_dir).context(IoRead)?;
+    let dir = read_dir(cur_dir).context(IoReadSnafu)?;
     let mut entries = vec![];
     let mut subdir_entries = vec![];
 
@@ -241,36 +231,36 @@ fn generate_sqlite_index<P: AsRef<Path>>(docset_dir: P, entries: Vec<DocsetEntry
     conn_path.push("Contents");
     conn_path.push("Resources");
     conn_path.push("docSet.dsidx");
-    let mut conn = Connection::open(&conn_path).context(Sqlite)?;
+    let mut conn = Connection::open(&conn_path).context(SqliteSnafu)?;
     conn.execute(
         "CREATE TABLE searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT);
         CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path);
         )",
         params![]
     )
-    .context(Sqlite)?;
-    let transaction = conn.transaction().context(Sqlite)?;
+    .context(SqliteSnafu)?;
+    let transaction = conn.transaction().context(SqliteSnafu)?;
     {
         let mut stmt = transaction
             .prepare("INSERT INTO searchIndex (name, type, path) VALUES (?1, ?2, ?3)")
-            .context(Sqlite)?;
+            .context(SqliteSnafu)?;
         for entry in entries {
             stmt.execute([
                 entry.name,
                 entry.ty.to_string(),
                 entry.path.to_str().unwrap().to_owned()
             ])
-            .context(Sqlite)?;
+            .context(SqliteSnafu)?;
         }
     }
-    transaction.commit().context(Sqlite)?;
+    transaction.commit().context(SqliteSnafu)?;
     Ok(())
 }
 
 fn copy_dir_recursive<Ps: AsRef<Path>, Pd: AsRef<Path>>(src: Ps, dst: Pd) -> Result<()> {
-    create_dir_all(&dst).context(IoWrite)?;
-    for entry in read_dir(&src).context(IoRead)? {
-        let entry = entry.context(IoWrite)?.path();
+    create_dir_all(&dst).context(IoWriteSnafu)?;
+    for entry in read_dir(&src).context(IoReadSnafu)? {
+        let entry = entry.context(IoWriteSnafu)?.path();
         if entry.is_dir() {
             let mut dst_dir = dst.as_ref().to_owned();
             dst_dir.push(entry.strip_prefix(&src).unwrap());
@@ -278,22 +268,23 @@ fn copy_dir_recursive<Ps: AsRef<Path>, Pd: AsRef<Path>>(src: Ps, dst: Pd) -> Res
         } else if entry.is_file() {
             let mut dst_file = dst.as_ref().to_owned();
             dst_file.push(entry.file_name().unwrap());
-            copy(entry, dst_file).context(IoWrite)?;
+            copy(entry, dst_file).context(IoWriteSnafu)?;
         }
     }
     Ok(())
 }
 
-fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str, is_virtual_manifest: bool, first_package_name: Option<&str>) -> Result<()> {
+fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str, is_virtual_manifest: bool) -> Result<()> {
     let mut info_plist_path = docset_root_dir.as_ref().to_owned();
     info_plist_path.push("Contents");
     info_plist_path.push("Info.plist");
 
-    let mut info_file = File::create(info_plist_path).context(IoWrite)?;
-    let docset_index = if is_virtual_manifest {
-        format!("{}/index.html", first_package_name.unwrap())
+    let mut info_file = File::create(info_plist_path).context(IoWriteSnafu)?;
+    let index_entry = if is_virtual_manifest {
+        String::new()
     } else {
-        format!("{}/index.html", package_name)
+        format!("<key>dashIndexFilePath</key>
+                     <string>{0}</string> {0}/index.html", package_name)
     };
     write!(info_file,
         "\
@@ -305,8 +296,7 @@ fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str, is_vir
                 <string>{}</string>
             <key>CFBundleName</key>
                 <string>{}</string>
-            <key>dashIndexFilePath</key>
-                <string>{}</string>
+            {}
             <key>DocSetPlatformFamily</key>
                 <string>{}</string>
             <key>isDashDocset</key>
@@ -315,110 +305,54 @@ fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str, is_vir
                 <true/>
         </dict>
         </plist>",
-         package_name, package_name, docset_index, package_name).context(IoWrite)?;
+         package_name, package_name, index_entry, package_name).context(IoWriteSnafu)?;
     Ok(())
+}
+
+/// Determine the name we will use for the generated docset.
+/// If a name was provided on the command line, we use this one.
+/// If no name was provided:
+///   * If a single package was requested, use this one.
+///   * Otherwise, if there is a workspace root package and we have been asked to generate
+///     documentation for it, use this one.
+///   * Otherwise, fail with an error requesting to supply a name ?
+fn get_docset_name(cfg: &GenerateConfig, metadata: &Metadata) -> String {
+    match (cfg.workspace.all, cfg.workspace.package.len()) {
+        (false, 1) => cfg.workspace.package[0].to_owned(),
+        _ => {
+            if let Some(root_package) = metadata.root_package() {
+                root_package.name.to_owned()
+            }
+            else {
+                metadata.workspace_root.as_path().file_name().unwrap().to_owned()
+            }
+        }
+    }
 }
 
 pub fn generate(cfg: GenerateConfig) -> Result<()> {
     // Step 1: generate rustdoc
     // Figure out for which crate to build the doc and invoke cargo doc.
     // If no crate is specified, run cargo doc for the current crate/workspace.
-    if cfg.package != Package::All && !cfg.exclude.is_empty() {
-        return Args {
-            msg: "--exclude must be used with --all"
-        }
-        .fail();
-    }
-    // Determine the package name that we will use for the generated docset.
-    // If a single package was requested, use this one.
-    // Otherwise, we use the "root" package/workspace name.
-    // TODO: we should probably handle the Package::List case differently. Maybe provide an option
-    // to set the generated docset name ?
-    let mut is_virtual_manifest = false;
-    let mut first_package_name = None;
-    let package_name = match cfg.package.clone() {
-        Package::Single(package) => package,
-        _ => {
-            let manifest_location =
-                cfg.manifest_path
-                    .clone()
-                    .unwrap_or(locate_package_manifest()?);
-            let mut manifest_file = File::open(&manifest_location)
-                .context(IoRead)?;
-            let mut manifest_contents = String::new();
-            manifest_file
-                .read_to_string(&mut manifest_contents)
-                .context(IoRead)?;
-            let toml_manifest = manifest_contents.parse::<Value>().context(Toml)?;
-            let package_table = toml_manifest
-                .as_table()
-                .expect("Cargo.toml is not a toml table")
-                .get("package");
-            match package_table {
-                Some(toml) => {
-                    toml.as_table()
-                    .expect("Cargo.toml package entry is not a toml table")
-                    .get("name")
-                    .expect("Cargo.toml doesn't define a package name")
-                    .as_str()
-                    .expect("Cargo.toml package.name entry is not a string")
-                    .to_owned()
-                }
-                None => {
-                    is_virtual_manifest = true;
-                    let members = toml_manifest.as_table()
-                        .unwrap()
-                        .get("workspace")
-                        .expect("Manifest has neither a package nor a workspace section")
-                        .as_table()
-                        .expect("Workspace section is not a toml table")
-                        .get("members")
-                        .expect("Workspace section does not have a member field")
-                        .as_array()
-                        .expect("Members field is not an array");
-                    first_package_name = Some(
-                        members
-                            .first()
-                            .expect("Virtual manifest workspace has no members")
-                            .as_str()
-                            .expect("Workspace member is not a string")
-                            .to_owned()
-                    );
-                    let manifest_path = Path::new(&manifest_location);
-                    manifest_path
-                        .parent()
-                        .expect("Manifest parent location is not a directory ???")
-                        .file_name()
-                        .unwrap()
-                        .to_string_lossy()
-                        .to_string()
-                }
-            }
-        }
-    };
-    let cargo_metadata = get_cargo_metadata()?;
-    let docset_root_dir = cfg.target_dir.as_deref().unwrap_or(&cargo_metadata.target_directory);
-    let mut docset_root_dir_path = PathBuf::from_str(docset_root_dir).unwrap();
-    let mut rustdoc_root_dir = docset_root_dir_path.clone();
-    rustdoc_root_dir.push("doc");
-    docset_root_dir_path.push("docset");
-    docset_root_dir_path.push(format!("{}.docset", package_name));
+    ensure!(!(cfg.workspace.all && !cfg.workspace.exclude.is_empty()), ArgsSnafu { msg: "--exclude must be used with --all" });
+
+    let cargo_metadata = cfg.manifest.metadata().exec().context(CargoMetadataSnafu)?;
 
     // Clean the documentation directory if so requested
     if cfg.clean {
         println!("Running 'cargo clean --doc'...");
         let mut cargo_clean_args = vec!["clean".to_owned()];
-        if let Some(ref manifest_path) = &cfg.manifest_path {
+        if let Some(ref manifest_path) = &cfg.manifest.manifest_path {
             cargo_clean_args.push("--manifest-path".to_owned());
-            cargo_clean_args.push(manifest_path.to_owned());
+            cargo_clean_args.push(manifest_path.to_string_lossy().to_string());
         }
         let cargo_clean_result = Command::new("cargo")
             .args(cargo_clean_args)
             .arg("--doc")
             .status()
-            .context(Spawn)?;
+            .context(SpawnSnafu)?;
         if !cargo_clean_result.success() {
-            return CargoClean {
+            return CargoCleanSnafu {
                 code: cargo_clean_result.code()
             }
             .fail();
@@ -428,39 +362,52 @@ pub fn generate(cfg: GenerateConfig) -> Result<()> {
     println!("Running 'cargo doc'...");
     let cargo_doc_result = Command::new("cargo")
         .arg("doc")
-        .args(cfg.into_args())
+        .args(cfg.clone().into_args())
         .status()
-        .context(Spawn)?;
+        .context(SpawnSnafu)?;
     if !cargo_doc_result.success() {
-        return CargoDoc {
+        return CargoDocSnafu {
             code: cargo_doc_result.code()
         }
         .fail();
     }
 
     // Step 2: iterate over all the html files in the doc directory and parse the filenames
+    let docset_name = get_docset_name(&cfg, &cargo_metadata);
+    let mut docset_root_dir = cfg.target_dir.clone().unwrap_or(cargo_metadata.target_directory.clone().into_std_path_buf());
+    let mut rustdoc_root_dir = docset_root_dir.clone();
+    rustdoc_root_dir.push("doc");
+    docset_root_dir.push("docset");
+    docset_root_dir.push(format!("{}.docset", docset_name));
     let entries = recursive_walk(&rustdoc_root_dir, &rustdoc_root_dir, None)?;
 
     // Step 3: generate the SQLite database
     // At this point, we need to start writing into the output docset directory, so create the
     // hirerarchy, and clean it first if it already exists.
-    if docset_root_dir_path.exists() {
-        remove_dir_all(&docset_root_dir_path).context(IoWrite)?;
+    if docset_root_dir.exists() {
+        remove_dir_all(&docset_root_dir).context(IoWriteSnafu)?;
     }
-    let mut docset_hierarchy = docset_root_dir_path.clone();
+    let mut docset_hierarchy = docset_root_dir.clone();
     docset_hierarchy.push("Contents");
     docset_hierarchy.push("Resources");
-    create_dir_all(&docset_hierarchy).context(IoWrite)?;
-    generate_sqlite_index(&docset_root_dir_path, entries)?;
+    create_dir_all(&docset_hierarchy).context(IoWriteSnafu)?;
+    generate_sqlite_index(&docset_root_dir, entries)?;
 
     // Step 4: Copy the rustdoc to the docset directory
     docset_hierarchy.push("Documents");
     copy_dir_recursive(&rustdoc_root_dir, &docset_hierarchy)?;
 
     // Step 5: add the required metadata
-    write_metadata(&docset_root_dir_path, &package_name, is_virtual_manifest, first_package_name.as_deref())?;
+    write_metadata(&docset_root_dir, &docset_name, cargo_metadata.root_package().is_none())?;
 
-    println!("Docset succesfully generated in {}", docset_root_dir_path.to_string_lossy());
+    println!("Docset succesfully generated in {}", docset_root_dir.to_string_lossy());
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_config_into_args() {
+    }
 }

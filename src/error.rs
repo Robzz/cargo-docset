@@ -3,7 +3,7 @@ use snafu::Snafu;
 use std::result::Result as StdResult;
 
 #[derive(Debug, Snafu)]
-#[snafu(visibility = "pub")]
+#[snafu(visibility(pub(crate)))]
 pub enum Error {
     #[snafu(display("Cargo doc exited with code {:?}.", code))]
     CargoDoc {
@@ -12,6 +12,10 @@ pub enum Error {
     #[snafu(display("Cargo clean exited with code {:?}.", code))]
     CargoClean {
         code: Option<i32>
+    },
+    #[snafu(display("Error running 'cargo metadata' command: {}", source))]
+    CargoMetadata {
+        source: cargo_metadata::Error
     },
     #[snafu(display("Process spawn error: {}", source))]
     Spawn {
@@ -29,17 +33,9 @@ pub enum Error {
     IoWrite {
         source: std::io::Error
     },
-    #[snafu(display("Cannot parse Cargo.toml: {}", source))]
-    Toml {
-        source: toml::de::Error
-    },
     Sqlite {
         source: rusqlite::Error
     },
-    Json {
-        source: serde_json::Error
-    },
-    #[snafu(display("Invalid arguments: {}", msg))]
     Args {
         msg: &'static str
     }

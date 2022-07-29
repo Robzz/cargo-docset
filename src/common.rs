@@ -1,23 +1,10 @@
-use crate::error::*;
-
 use derive_more::Constructor;
-use serde::Deserialize;
-use snafu::ResultExt;
 
 use std::{
     fmt::Display,
     path::PathBuf,
-    process::Command,
     result::Result as StdResult,
 };
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Package {
-    All,
-    Current,
-    Single(String),
-    List(Vec<String>)
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EntryType {
@@ -55,32 +42,12 @@ pub struct DocsetEntry {
     pub path: PathBuf
 }
 
-#[derive(Debug, Deserialize)]
-struct ManifestLocation {
-    pub root: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CargoMetadata {
-    pub workspace_root: String,
-    pub target_directory: String,
-}
-
-pub fn locate_package_manifest() -> Result<String> {
+//pub fn locate_package_manifest() -> Result<PathBuf> {
     // Use the cargo `locate-project` subcommand to locate the package manifest.
-    let cargo_locate_result = Command::new("cargo")
-        .args(vec!["locate-project"])
-        .output()
-        .context(Spawn)?;
-    let dir: ManifestLocation = serde_json::from_slice(&cargo_locate_result.stdout).context(Json)?;
-    Ok(dir.root)
-}
-
-pub fn get_cargo_metadata() -> Result<CargoMetadata> {
-    // Use the cargo `metadata` subcommand to locate the workspace root and other useful information.
-    let cargo_locate_result = Command::new("cargo")
-        .args(vec!["metadata", "--no-deps", "--format-version", "1"])
-        .output()
-        .context(Spawn)?;
-    serde_json::from_slice::<CargoMetadata>(&cargo_locate_result.stdout).context(Json)
-}
+    //let cargo_locate_result = Command::new("cargo")
+        //.args(vec!["locate-project"])
+        //.output()
+        //.context(SpawnSnafu)?;
+    //let dir: ManifestLocation = serde_json::from_slice(&cargo_locate_result.stdout).context(JsonSnafu)?;
+    //Ok(dir.root.into())
+//}
