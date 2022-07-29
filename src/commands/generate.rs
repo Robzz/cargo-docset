@@ -28,7 +28,7 @@ pub struct GenerateConfig {
     pub all_features: bool,
     pub target: Option<String>,
     pub target_dir: Option<PathBuf>,
-    pub clean: bool,
+    pub no_clean: bool,
     pub lib: bool,
     pub bin: Vec<String>,
     pub bins: bool,
@@ -48,7 +48,7 @@ impl Default for GenerateConfig {
             all_features: false,
             target: None,
             target_dir: None,
-            clean: true,
+            no_clean: false,
             lib: false,
             bin: Vec::new(),
             bins: false,
@@ -362,8 +362,8 @@ pub fn generate(cfg: GenerateConfig) -> Result<()> {
 
     let cargo_metadata = cfg.manifest.metadata().exec().context(CargoMetadataSnafu)?;
 
-    // Clean the documentation directory if so requested
-    if cfg.clean {
+    // Clean the documentation directory if the user didn't explicitly ask not to clean it.
+    if !cfg.no_clean {
         println!("Running 'cargo clean --doc'...");
         let mut cargo_clean_args = vec!["clean".to_owned()];
         if let Some(ref manifest_path) = &cfg.manifest.manifest_path {
