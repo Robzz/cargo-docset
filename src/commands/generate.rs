@@ -1,19 +1,58 @@
 //! Implementation of the `docset` subcommand.
 
-use crate::{common::*, error::*, io::*, DocsetParams};
+use crate::{error::*, io::*, DocsetParams};
 
 use cargo_metadata::Metadata;
+use derive_more::Constructor;
 use rusqlite::{params, Connection};
 use snafu::{ensure, ResultExt};
 
 use std::{
     borrow::ToOwned,
     ffi::OsStr,
+    fmt::Display,
     fs::{copy, create_dir_all, read_dir, remove_dir_all, File},
     io::Write,
-    path::Path,
-    process::Command
+    path::{Path, PathBuf},
+    process::Command,
+    result::Result as StdResult,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EntryType {
+    Constant,
+    Enum,
+    Function,
+    Macro,
+    Module,
+    Package, // i.e. crate
+    Struct,
+    Trait,
+    Type //Union // Is this even implemented in Rust ?
+}
+
+impl Display for EntryType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> StdResult<(), std::fmt::Error> {
+        match self {
+            EntryType::Constant => write!(f, "Constant"),
+            EntryType::Enum => write!(f, "Enum"),
+            EntryType::Function => write!(f, "Function"),
+            EntryType::Macro => write!(f, "Macro"),
+            EntryType::Module => write!(f, "Module"),
+            EntryType::Package => write!(f, "Package"),
+            EntryType::Struct => write!(f, "Struct"),
+            EntryType::Trait => write!(f, "Trait"),
+            EntryType::Type => write!(f, "Type")
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Constructor)]
+pub struct DocsetEntry {
+    pub name: String,
+    pub ty: EntryType,
+    pub path: PathBuf
+}
 
 fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(
     module_path: &Option<&str>,
