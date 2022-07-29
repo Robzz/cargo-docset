@@ -398,7 +398,7 @@ pub fn generate_docset(cfg: DocsetParams) -> Result<()> {
     rustdoc_root_dir.push("doc");
     docset_root_dir.push("docset");
     let docset_identifier = get_docset_platform_family(&cfg, &cargo_metadata);
-    docset_root_dir.push(format!("{}.docset", docset_identifier.clone().unwrap_or("generated-docset.docset".to_owned())));
+    docset_root_dir.push(format!("{}.docset", docset_identifier.clone().unwrap_or_else(|| "generated-docset.docset".to_owned())));
     let entries = recursive_walk(&rustdoc_root_dir, &rustdoc_root_dir, None)?;
 
     // Step 3: generate the SQLite database

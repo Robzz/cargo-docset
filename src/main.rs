@@ -31,10 +31,10 @@ pub struct DocsetParams {
     #[clap(long("document-private-items"))]
     /// Generate documentation for private items.
     pub doc_private_items: bool,
-    #[clap(value_parser)]
+    #[clap(long, value_parser)]
     /// Build documentation for the specified target triple.
     pub target: Option<String>,
-    #[clap(value_parser)]
+    #[clap(long, value_parser)]
     /// Override the workspace target directory.
     pub target_dir: Option<PathBuf>,
     #[clap(long, action)]
@@ -43,7 +43,7 @@ pub struct DocsetParams {
     #[clap(long, action)]
     /// Document only this package's library.
     pub lib: bool,
-    #[clap(value_parser)]
+    #[clap(long, value_parser)]
     /// Document only the specified binary.
     pub bin: Vec<String>,
     #[clap(long, action)]
@@ -65,7 +65,11 @@ impl DocsetParams {
     /// Generate args for the cargo doc invocation.
     fn into_args(self) -> Vec<String> {
         let mut args = Vec::new();
-        if self.workspace.all {
+        if let Some(manifest_path) = self.manifest.manifest_path {
+            args.push("--manifest-path".to_owned());
+            args.push(manifest_path.to_string_lossy().to_string());
+        }
+        if self.workspace.workspace || self.workspace.all {
             args.push("--workspace".to_owned());
             for exclude in self.workspace.exclude {
                 args.extend_from_slice(&["--exclude".to_owned(), exclude]);
@@ -131,7 +135,164 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    //use std::{path::PathBuf, str::FromStr};
+
+    use clap::Parser;
+
+    use crate::{DocsetParams, Commands};
+
+    use super::Cli;
+
     #[test]
-    fn test_config_into_args() {
+    fn clap_verify_cli() {
+        use clap::CommandFactory;
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn test_default_docset_params_into_args_is_empty() {
+        let params = DocsetParams::default();
+        let args = params.into_args();
+        assert!(args.is_empty());
+    }
+
+    const TEST_DOCSET_PARAMS_1_MANIFEST_PATH: &str = "../somewhere_else/";
+    const TEST_DOCSET_PARAMS_1_ENABLED_FEATURE: &str = "feature1";
+    const TEST_DOCSET_PARAMS_1_EXCLUDED: &str = "excluded_package";
+    const TEST_DOCSET_PARAMS_1_TARGET: &str = "x86_64-pc-windows-gnu";
+    const TEST_DOCSET_PARAMS_1_DOCSET_NAME: &str = "Unit test docset 1";
+    const TEST_DOCSET_PARAMS_1_DOCSET_INDEX: &str = "member1";
+    const TEST_DOCSET_PARAMS_1_PLATFORM_FAMILY: &str = "dp1";
+    const TEST_DOCSET_PARAMS_1_ARGS: &[&str] = &[
+        "cargo",
+        "docset",
+        "--manifest-path",
+        TEST_DOCSET_PARAMS_1_MANIFEST_PATH,
+        "--workspace",
+        "--no-default-features",
+        "--features",
+        TEST_DOCSET_PARAMS_1_ENABLED_FEATURE,
+        "--exclude",
+        TEST_DOCSET_PARAMS_1_EXCLUDED,
+        "--no-deps",
+        "--document-private-items",
+        "--target",
+        TEST_DOCSET_PARAMS_1_TARGET,
+        "--no-clean",
+        "--docset-name",
+        TEST_DOCSET_PARAMS_1_DOCSET_NAME,
+        "--docset-index",
+        TEST_DOCSET_PARAMS_1_DOCSET_INDEX,
+        "--platform-family",
+        TEST_DOCSET_PARAMS_1_PLATFORM_FAMILY
+    ];
+
+    fn get_test_docset_params_1() -> Cli {
+        Cli::parse_from(TEST_DOCSET_PARAMS_1_ARGS)
+    }
+
+    #[test]
+    fn test_parse_docset_params_1() {
+        let res = Cli::try_parse_from(TEST_DOCSET_PARAMS_1_ARGS);
+        assert!(res.is_ok(), "Could not parse CLI arguments: {}", res.err().unwrap());
+    }
+
+    #[test]
+    fn test_validate_matches_docset_params_1() {
+        let params = get_test_docset_params_1();
+        match params.command {
+            Commands::Docset(params) => {
+                assert!(params.manifest.manifest_path.is_some());
+                assert_eq!(params.manifest.manifest_path.unwrap().to_string_lossy(), TEST_DOCSET_PARAMS_1_MANIFEST_PATH);
+
+                assert!(params.workspace.workspace);
+                assert!(params.workspace.package.is_empty());
+                assert_eq!(params.workspace.exclude.len(), 1);
+                assert_eq!(params.workspace.exclude[0], TEST_DOCSET_PARAMS_1_EXCLUDED);
+
+                assert!(params.features.no_default_features);
+                assert_eq!(params.features.features.len(), 1);
+                assert_eq!(params.features.features[0], TEST_DOCSET_PARAMS_1_ENABLED_FEATURE);
+
+                assert!(params.no_dependencies);
+
+                assert!(params.doc_private_items);
+
+                assert!(params.target.is_some());
+                assert_eq!(params.target.unwrap(), TEST_DOCSET_PARAMS_1_TARGET);
+
+                assert!(params.target_dir.is_none());
+
+                assert!(params.no_clean);
+
+                assert!(!params.lib);
+
+                assert!(params.bin.is_empty());
+
+                assert!(!params.bins);
+
+                assert!(params.docset_name.is_some());
+                assert_eq!(params.docset_name.unwrap(), TEST_DOCSET_PARAMS_1_DOCSET_NAME);
+
+                assert!(params.docset_index.is_some());
+                assert_eq!(params.docset_index.unwrap(), TEST_DOCSET_PARAMS_1_DOCSET_INDEX);
+
+                assert!(params.platform_family.is_some());
+                assert_eq!(params.platform_family.unwrap(), TEST_DOCSET_PARAMS_1_PLATFORM_FAMILY);
+            }
+        }
+    }
+
+    #[test]
+    fn test_validate_docset_params_1_into_args() {
+        let params = get_test_docset_params_1();
+        match params.command {
+            Commands::Docset(params) => {
+                let mut cargo_doc_args = params.into_args();
+
+                dbg!(&cargo_doc_args);
+
+                let expected_flags = &[
+                    "--workspace",
+                    "--no-default-features",
+                    "--no-deps",
+                    "--document-private-items",
+                ];
+
+                let expected_pairs = &[
+                    ("--manifest-path", TEST_DOCSET_PARAMS_1_MANIFEST_PATH),
+                    ("--features", TEST_DOCSET_PARAMS_1_ENABLED_FEATURE),
+                    ("--exclude", TEST_DOCSET_PARAMS_1_EXCLUDED),
+                    ("--target", TEST_DOCSET_PARAMS_1_TARGET)
+                ];
+
+                for flag in expected_flags {
+                    assert!(cargo_doc_args.contains(&flag.to_string()), "Expected flag {} in vector {:?}", flag, cargo_doc_args);
+                    let i = cargo_doc_args.iter().enumerate().find(|(_i, arg)| flag == arg).unwrap().0;
+                    cargo_doc_args.remove(i);
+                }
+
+                for pair in expected_pairs {
+                    let mut i = -1;
+                    'inner: for (j, sub) in cargo_doc_args.chunks_exact(2).enumerate() {
+                        dbg!(pair.0 == sub[0]);
+                        dbg!(pair.1 == sub[1]);
+                        if sub[0] == pair.0 && sub[1] == pair.1 {
+                            i = j as i32;
+                            dbg!(i);
+                            break 'inner;
+                        }
+                    }
+
+                    assert!(i >= 0, "Expected argument pair {:?} in arguments {:?}", pair, cargo_doc_args);
+                    dbg!(cargo_doc_args.remove(i as usize * 2));
+                    dbg!(cargo_doc_args.remove(i as usize * 2));
+
+                    dbg!(&cargo_doc_args);
+                }
+
+                assert!(cargo_doc_args.is_empty());
+            }
+        }
     }
 }
