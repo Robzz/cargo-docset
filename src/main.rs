@@ -40,8 +40,10 @@ enum Commands {
         bin: Vec<String>,
         #[clap(long, action)]
         bins: bool,
-        #[clap()]
-        docset_name: Option<String>
+        #[clap(long, value_parser)]
+        docset_name: Option<String>,
+        #[clap(long, value_parser)]
+        docset_index: Option<String>
     }
 }
 
@@ -59,7 +61,8 @@ fn run(cli: Cli) -> Result<()> {
             lib,
             bin,
             bins,
-            docset_name
+            docset_name,
+            docset_index
         } => {
             generate(GenerateConfig {
                 manifest,
@@ -75,7 +78,8 @@ fn run(cli: Cli) -> Result<()> {
                 lib,
                 bin,
                 bins,
-                docset_name
+                docset_name,
+                docset_index
             })
         }
     }

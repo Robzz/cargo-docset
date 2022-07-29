@@ -32,7 +32,8 @@ pub struct GenerateConfig {
     pub lib: bool,
     pub bin: Vec<String>,
     pub bins: bool,
-    pub docset_name: Option<String>
+    pub docset_name: Option<String>,
+    pub docset_index: Option<String>
 }
 
 impl Default for GenerateConfig {
@@ -51,7 +52,8 @@ impl Default for GenerateConfig {
             lib: false,
             bin: Vec::new(),
             bins: false,
-            docset_name: None
+            docset_name: None,
+            docset_index: None
         }
     }
 }
@@ -274,18 +276,20 @@ fn copy_dir_recursive<Ps: AsRef<Path>, Pd: AsRef<Path>>(src: Ps, dst: Pd) -> Res
     Ok(())
 }
 
-fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str, is_virtual_manifest: bool) -> Result<()> {
+fn write_metadata<P: AsRef<Path>>(docset_root_dir: P, package_name: &str, index_package: Option<String>) -> Result<()> {
     let mut info_plist_path = docset_root_dir.as_ref().to_owned();
     info_plist_path.push("Contents");
     info_plist_path.push("Info.plist");
 
     let mut info_file = File::create(info_plist_path).context(IoWriteSnafu)?;
-    let index_entry = if is_virtual_manifest {
-        String::new()
-    } else {
+    let index_entry = if let Some(index_package) = index_package {
         format!("<key>dashIndexFilePath</key>
-                     <string>{0}</string> {0}/index.html", package_name)
+                    <string>{0}</string> {0}/index.html", index_package)
+    }
+    else {
+        String::new()
     };
+
     write!(info_file,
         "\
         <?xml version=\"1.0\" encoding=\"UTF-8\"?>
@@ -325,6 +329,26 @@ fn get_docset_name(cfg: &GenerateConfig, metadata: &Metadata) -> String {
             }
             else {
                 metadata.workspace_root.as_path().file_name().unwrap().to_owned()
+            }
+        }
+    }
+}
+
+/// Return the name of the package that should be used for the docset index, if any.
+/// This uses the same rules as docset name selection, except no index is a valid option.
+fn get_docset_index(cfg: &GenerateConfig, metadata: &Metadata) -> Option<String> {
+    if cfg.docset_index.is_some() {
+        return cfg.docset_index.clone();
+    }
+
+    match (cfg.workspace.all, cfg.workspace.package.len()) {
+        (false, 1) => Some(cfg.workspace.package[0].to_owned()),
+        _ => {
+            if let Some(root_package) = metadata.root_package() {
+                Some(root_package.name.to_owned())
+            }
+            else {
+                None
             }
         }
     }
@@ -398,7 +422,7 @@ pub fn generate(cfg: GenerateConfig) -> Result<()> {
     copy_dir_recursive(&rustdoc_root_dir, &docset_hierarchy)?;
 
     // Step 5: add the required metadata
-    write_metadata(&docset_root_dir, &docset_name, cargo_metadata.root_package().is_none())?;
+    write_metadata(&docset_root_dir, &docset_name, get_docset_index(&cfg, &cargo_metadata))?;
 
     println!("Docset succesfully generated in {}", docset_root_dir.to_string_lossy());
 
