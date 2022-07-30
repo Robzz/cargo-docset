@@ -1,6 +1,6 @@
 # cargo-docset changelog
 
-## Unreleased - v0.2.2
+## 7/30/2022 - v0.3.0
 
 * Bugfix: module names are no longer suffixed by `::index`.
 * Bugfix: fix several issues with virtual workspaces.
