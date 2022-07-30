@@ -2,7 +2,7 @@
 name = "cargo-docset"
 authors = ["R.Chavignat <r.chavignat@gmail.com>"]
 description = "Generates a Zeal/Dash docset for your rust package."
-edition = "2018"
+edition = "2021"
 version = "0.2.1"
 
 repository = "https://github.com/Robzz/cargo-docset"
@@ -17,13 +17,15 @@ travis-ci = { repository = "Robzz/cargo-docset", branch = "master" }
 
 [features]
 bundled-sqlite = ["rusqlite/bundled"]
-default = []
+color = ["clap/color", "termcolor", "atty"]
+default = ["color"]
 
 [dependencies]
-clap = "2.33"
+atty = { version = "0.2", optional = true }
+cargo_metadata = "0.15"
+clap-cargo = { version = "0.9", features = ["cargo_metadata"] }
+clap = { version = "3.2", features = ["std", "suggestions", "derive"], default_features = false }
 derive_more = "0.99"
-rusqlite = "0.25"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-snafu = "0.6"
-toml = "0.5"
+rusqlite = "0.28"
+snafu = "0.7"
+termcolor = { version = "1.1", optional = true }
