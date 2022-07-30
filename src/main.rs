@@ -50,14 +50,15 @@ pub struct DocsetParams {
     /// Document all binaries.
     pub bins: bool,
     #[clap(long, value_parser)]
-    /// Specify or override the docset name.
+    /// Specify or override the name of the docset, this is the display name used by your docset
+    /// browser.
     pub docset_name: Option<String>,
-    #[clap(long, value_parser)]
+    #[clap(long, value_parser, name("PACKAGE"))]
     /// Specify or override the package whose index will be used as the docset index page.
     pub docset_index: Option<String>,
     #[clap(long, value_parser)]
-    /// Specify or override the docset platform family (used to specify the keyword used to search
-    /// this specific docset in documentation browsers).
+    /// Specify or override the docset platform family, this is used as the keyword you can specify
+    /// in your docset browser search bar to search this specific docset).
     pub platform_family: Option<String>
 }
 
@@ -250,8 +251,6 @@ mod tests {
             Commands::Docset(params) => {
                 let mut cargo_doc_args = params.into_args();
 
-                dbg!(&cargo_doc_args);
-
                 let expected_flags = &[
                     "--workspace",
                     "--no-default-features",
@@ -275,20 +274,13 @@ mod tests {
                 for pair in expected_pairs {
                     let mut i = -1;
                     'inner: for (j, sub) in cargo_doc_args.chunks_exact(2).enumerate() {
-                        dbg!(pair.0 == sub[0]);
-                        dbg!(pair.1 == sub[1]);
                         if sub[0] == pair.0 && sub[1] == pair.1 {
                             i = j as i32;
-                            dbg!(i);
                             break 'inner;
                         }
                     }
 
                     assert!(i >= 0, "Expected argument pair {:?} in arguments {:?}", pair, cargo_doc_args);
-                    dbg!(cargo_doc_args.remove(i as usize * 2));
-                    dbg!(cargo_doc_args.remove(i as usize * 2));
-
-                    dbg!(&cargo_doc_args);
                 }
 
                 assert!(cargo_doc_args.is_empty());

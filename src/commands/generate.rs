@@ -286,29 +286,48 @@ fn write_metadata<P: AsRef<Path>>(
     Ok(())
 }
 
+fn get_workspace_name(metadata: &Metadata) -> String {
+    metadata.workspace_root
+        .file_name()
+        // I doubt this could be None, but let's have a fallback just in case.
+        .unwrap_or("generated-docset")
+        .to_owned()
+}
+
 /// Determine the name we will use for the generated docset.
 /// If a name was provided on the command line, we use this one.
 /// If no name was provided:
 ///   * If a single package was requested, use this one.
 ///   * Otherwise, if there is a workspace root package and we have been asked to generate
 ///     documentation for it, use this one.
-///   * Otherwise, generate a name from the list of workspace member packages being built.
+///   * Otherwise, generate a name from the workspace "name" and the list of workspace member packages being built.
 fn get_docset_name(cfg: &DocsetParams, metadata: &Metadata) -> String {
     if let Some(docset_name) = &cfg.docset_name {
         return docset_name.to_owned();
     }
 
-    match (cfg.workspace.all, cfg.workspace.package.len()) {
-        (false, 1) => cfg.workspace.package[0].to_owned(),
-        _ => {
-            if let Some(root_package) = metadata.root_package() {
-                root_package.name.to_owned()
-            } else {
-                let package_list = cfg.workspace.package.join(", ");
-                format!("Docset for packages {}", package_list)
-            }
+    let (included, _excluded) = cfg.workspace.partition_packages(metadata);
+
+    if included.len() == 1 {
+        return included[0].name.to_owned();
+    }
+
+    // Rust 1.64 will stabilize the `let_chains` feature which should allow combining both conditionals
+    if let Some(root_package) = metadata.root_package() {
+        if included.contains(&root_package) {
+            return root_package.name.to_owned();
         }
     }
+
+    let package_list_str = included
+        .into_iter()
+        .filter_map(|p|  {
+            if cfg.workspace.exclude.contains(&p.name) { None } else { Some(p.name.as_str()) }
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    format!("{}: {}", get_workspace_name(metadata), package_list_str)
 }
 
 /// Return the name of the package that should be used for the docset index, if any.
@@ -375,7 +394,6 @@ pub fn generate_docset(cfg: DocsetParams) -> Result<()> {
     // Good to go, generate the documentation.
     println!("Running 'cargo doc'...");
     let args = cfg.clone().into_args();
-    dbg!(&args);
     let cargo_doc_result = Command::new("cargo")
         .arg("doc")
         .args(args)
@@ -398,7 +416,10 @@ pub fn generate_docset(cfg: DocsetParams) -> Result<()> {
     rustdoc_root_dir.push("doc");
     docset_root_dir.push("docset");
     let docset_identifier = get_docset_platform_family(&cfg, &cargo_metadata);
-    docset_root_dir.push(format!("{}.docset", docset_identifier.clone().unwrap_or_else(|| "generated-docset.docset".to_owned())));
+    docset_root_dir.push(
+        format!("{}.docset",
+            docset_identifier.clone()
+                .unwrap_or_else(|| get_workspace_name(&cargo_metadata))));
     let entries = recursive_walk(&rustdoc_root_dir, &rustdoc_root_dir, None)?;
 
     // Step 3: generate the SQLite database

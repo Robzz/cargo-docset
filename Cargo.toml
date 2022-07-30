@@ -24,7 +24,7 @@ default = ["color"]
 atty = { version = "0.2", optional = true }
 cargo_metadata = "0.15"
 clap-cargo = { version = "0.9", features = ["cargo_metadata"] }
-clap = { version = "3.2", features = ["std", "suggestions", "derive"] }
+clap = { version = "3.2", features = ["std", "suggestions", "derive"], default_features = false }
 derive_more = "0.99"
 rusqlite = "0.28"
 snafu = "0.7"
