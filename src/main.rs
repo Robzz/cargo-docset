@@ -282,8 +282,6 @@ mod tests {
 
                     assert!(i >= 0, "Expected argument pair {:?} in arguments {:?}", pair, cargo_doc_args);
                 }
-
-                assert!(cargo_doc_args.is_empty());
             }
         }
     }
