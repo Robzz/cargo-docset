@@ -49,6 +49,8 @@ dependencies = [
  "clap-cargo",
  "derive_more",
  "rusqlite",
+ "serde",
+ "serde_json",
  "snafu",
  "termcolor",
 ]

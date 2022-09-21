@@ -21,6 +21,13 @@ Just run `cargo docset` in your crate's directory to generate the docset. It wil
 directory. cargo-docset generally supports the same options as `cargo doc`, with a few additional ones. For more
 information, run `cargo docset --help` or look below in this README.
 
+Most arguments accepted by the CLI can also be given default values for your crate by adding them as cargo
+[workspace metadata](https://doc.rust-lang.org/cargo/reference/workspaces.html#the-workspacemetadata-table);
+Arguments provided in a CLI invocation will take precedence over such defaults. For CLI flags that don't take a value,
+use the `true` value in the metadata to signify the presence of the flag. The following keys are supported (please
+refer to the CLI documentation for what each option does): `features`, `no-deps`, `document-private-items`, `target`,
+`lib`, `bin`, `bins`, `docset-name`, `docset-index`, `platform-family`.
+
 To install your shiny new docset, copy it to your Zeal/Dash docset directory (available in the preferences, on Zeal at
 least) and restart Zeal/Dash.
 
