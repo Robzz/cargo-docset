@@ -12,7 +12,7 @@ use std::{
     ffi::OsStr,
     fmt::Display,
     fs::{copy, create_dir_all, read_dir, remove_dir_all, File},
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::Command,
     result::Result as StdResult,
@@ -54,6 +54,11 @@ pub struct DocsetEntry {
     pub path: PathBuf
 }
 
+fn check_if_redirection(html: &str) -> bool {
+    // TODO: optimize
+    html.contains("<title>Redirection</title>")
+}
+
 fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(
     module_path: &Option<&str>,
     rustdoc_root_dir: P1,
@@ -61,6 +66,15 @@ fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(
 ) -> Option<DocsetEntry> {
     if file_path.as_ref().extension() == Some(OsStr::new("html")) {
         let file_name = file_path.as_ref().file_name().unwrap().to_string_lossy();
+        let mut file = File::open(file_path.as_ref())
+            .expect("Could not open file");
+        let mut file_contents = String::new();
+        file.read_to_string(&mut file_contents)
+            .expect("Could not read file");
+        if check_if_redirection(&file_contents) {
+            return None;
+        }
+
         let parts = file_name.split('.').collect::<Vec<_>>();
 
         let file_db_path = file_path
