@@ -12,7 +12,7 @@ use std::{
     ffi::OsStr,
     fmt::Display,
     fs::{copy, create_dir_all, read_dir, remove_dir_all, File},
-    io::{Read, Write},
+    io::{Write, BufReader, BufRead},
     path::{Path, PathBuf},
     process::Command,
     result::Result as StdResult,
@@ -54,9 +54,25 @@ pub struct DocsetEntry {
     pub path: PathBuf
 }
 
-fn check_if_redirection(html: &str) -> bool {
-    // TODO: optimize
-    html.contains("<title>Redirection</title>")
+fn check_if_redirection(html_file: &mut File) -> bool {
+    // 512 bytes should get to the end of the head section for most redirection pages in one read,
+    // while reading less data than the 8kB default.
+    let mut reader = BufReader::with_capacity(512, html_file);
+
+    let mut file_contents = String::new();
+    loop {
+        let prev_len = file_contents.len();
+        let n = reader.read_line(&mut file_contents).expect("Could not read from file");
+        if n == 0 {
+            // EOF
+            break;
+        }
+        if file_contents[prev_len..prev_len+n].contains("</head>") {
+            // End of the head section, stop here instead of parsing the whole file
+            break;
+        }
+    }
+    file_contents.contains("<title>Redirection</title>")
 }
 
 fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(
@@ -68,10 +84,7 @@ fn parse_docset_entry<P1: AsRef<Path>, P2: AsRef<Path>>(
         let file_name = file_path.as_ref().file_name().unwrap().to_string_lossy();
         let mut file = File::open(file_path.as_ref())
             .expect("Could not open file");
-        let mut file_contents = String::new();
-        file.read_to_string(&mut file_contents)
-            .expect("Could not read file");
-        if check_if_redirection(&file_contents) {
+        if check_if_redirection(&mut file) {
             return None;
         }
 
@@ -181,7 +194,7 @@ fn recursive_walk(
                     Some(&subdir_module_path)
                 ));
             }
-        } else if let Some(entry) = parse_docset_entry(&module_path, &root_dir, &dir_entry.path()) {
+        } else if let Some(entry) = parse_docset_entry(&module_path, root_dir, &dir_entry.path()) {
             entries.push(entry);
         }
     }
