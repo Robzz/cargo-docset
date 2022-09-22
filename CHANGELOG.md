@@ -1,5 +1,13 @@
 # cargo-docset changelog
 
+## Unreleased - v0.3.1
+
+* Bugfix: update the crate version in Cargo.lock (thanks @antifuchs)
+* Bugfix: attempt not to index files that only consist of a redirection.
+* CI: switch to github actions
+* Tests: add some basic unit tests surrounding CLI arguments parsing.
+* Maintenance: update dependencies
+
 ## 7/30/2022 - v0.3.0
 
 * Bugfix: module names are no longer suffixed by `::index`.

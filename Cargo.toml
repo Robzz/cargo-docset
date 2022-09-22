@@ -3,7 +3,7 @@ name = "cargo-docset"
 authors = ["R.Chavignat <r.chavignat@gmail.com>"]
 description = "Generates a Zeal/Dash docset for your rust package."
 edition = "2021"
-version = "0.3.0"
+version = "0.3.1"
 
 repository = "https://github.com/Robzz/cargo-docset"
 readme = "README.md"
