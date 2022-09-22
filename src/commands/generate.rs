@@ -370,7 +370,7 @@ fn get_docset_index(cfg: &DocsetParams, metadata: &Metadata) -> Option<String> {
     }
 }
 
-/// Return the keywork that should be used for the docset platform family, if any.
+/// Return the keyword that should be used for the docset platform family, if any.
 /// This uses the same rules as docset name selection, except no identifier is a valid option.
 fn get_docset_platform_family(cfg: &DocsetParams, metadata: &Metadata) -> Option<String> {
     if let Some(platform_family) = &cfg.platform_family {
@@ -442,10 +442,10 @@ pub fn generate_docset(cfg: DocsetParams) -> Result<()> {
     let mut rustdoc_root_dir = docset_root_dir.clone();
     rustdoc_root_dir.push("doc");
     docset_root_dir.push("docset");
-    let docset_identifier = get_docset_platform_family(&cfg, &cargo_metadata);
+    let platform_family = get_docset_platform_family(&cfg, &cargo_metadata);
     docset_root_dir.push(
         format!("{}.docset",
-            docset_identifier.clone()
+            platform_family.clone()
                 .unwrap_or_else(|| get_workspace_name(&cargo_metadata))));
     let entries = recursive_walk(&rustdoc_root_dir, &rustdoc_root_dir, None)?;
 
@@ -466,15 +466,15 @@ pub fn generate_docset(cfg: DocsetParams) -> Result<()> {
     copy_dir_recursive(&rustdoc_root_dir, &docset_hierarchy)?;
 
     // Step 5: add the required metadata
-    if docset_identifier.is_none() {
-        warn("no docset identifier was provided and none could be generated, consider adding the '--docset-identifier' option.");
+    if platform_family.is_none() {
+        warn("no platform family was provided and none could be generated, consider adding the '--platform-family' option.");
     }
 
     write_metadata(
         &docset_root_dir,
         &docset_name,
         get_docset_index(&cfg, &cargo_metadata),
-        docset_identifier
+        platform_family
     )?;
 
     println!(
