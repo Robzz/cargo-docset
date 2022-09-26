@@ -13,7 +13,6 @@ categories = ["development-tools", "command-line-utilities"]
 
 [badges]
 maintenance = { status = "experimental" }
-travis-ci = { repository = "Robzz/cargo-docset", branch = "master" }
 
 [features]
 bundled-sqlite = ["rusqlite/bundled"]

@@ -1,6 +1,6 @@
 # cargo-docset changelog
 
-## Unreleased - v0.3.1
+## 9/26/2022 - v0.3.1
 
 * Bugfix: update the crate version in Cargo.lock (thanks @antifuchs)
 * Bugfix: attempt not to index files that only consist of a redirection.
