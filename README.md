@@ -1,6 +1,6 @@
 # `cargo-docset` - Generate a Zeal/Dash docset for your Rust crate or workspace
 
-[![Build Status](https://travis-ci.org/Robzz/cargo-docset.svg?branch=master)](https://travis-ci.org/Robzz/cargo-docset)
+![Build status](https://github.com/Robzz/cargo-docset/actions/workflows/rust.yml/badge.svg?branch=master)
 [![Crate](https://img.shields.io/crates/v/cargo-docset.svg)](https://crates.io/crates/cargo-docset)
 
 `cargo-docset` is a tool allowing you to generate a [Dash](https://kapeli.com/dash)/[Zeal](https://zealdocs.org/)
