@@ -478,7 +478,7 @@ pub fn generate_docset(cfg: DocsetParams) -> Result<()> {
     )?;
 
     println!(
-        "Docset succesfully generated in {}",
+        "Docset successfully generated in {}",
         docset_root_dir.to_string_lossy()
     );
 
