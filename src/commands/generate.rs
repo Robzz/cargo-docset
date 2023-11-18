@@ -1,6 +1,6 @@
 //! Implementation of the `docset` subcommand.
 
-use crate::{error::*, io::*, DocsetParams};
+use crate::{error::*, io::*, DocsetParams, WorkspaceMetadata};
 
 use cargo_metadata::Metadata;
 use derive_more::Constructor;
@@ -383,7 +383,7 @@ fn get_docset_platform_family(cfg: &DocsetParams, metadata: &Metadata) -> Option
     }
 }
 
-pub fn generate_docset(cfg: DocsetParams) -> Result<()> {
+pub fn generate_docset(mut cfg: DocsetParams) -> Result<()> {
     // Step 1: generate rustdoc
     // Figure out for which crate to build the doc and invoke cargo doc.
     // If no crate is specified, run cargo doc for the current crate/workspace.
@@ -396,7 +396,50 @@ pub fn generate_docset(cfg: DocsetParams) -> Result<()> {
         );
     }
 
+    // Merge the options specified in cargo metadata. Options specified on the CLI take precedence.
     let cargo_metadata = cfg.manifest.metadata().exec().context(CargoMetadataSnafu)?;
+    let workspace_metadata_res = serde_json::from_value::<WorkspaceMetadata>(cargo_metadata.workspace_metadata.clone());
+    if let Ok(workspace_metadata) = workspace_metadata_res {
+        if !cfg.features.all_features && cfg.features.features.is_empty() && workspace_metadata.features.is_some() {
+            cfg.features.features = workspace_metadata.features.unwrap();
+        }
+
+        if !cfg.no_dependencies && workspace_metadata.no_deps.unwrap_or(false) {
+            cfg.no_dependencies = true;
+        }
+
+        if !cfg.doc_private_items && workspace_metadata.document_private_items.unwrap_or(false) {
+            cfg.doc_private_items = true;
+        }
+
+        if cfg.target.is_none() && workspace_metadata.target.is_some() {
+            cfg.target = workspace_metadata.target;
+        }
+
+        if !cfg.lib && workspace_metadata.lib.unwrap_or(false) {
+            cfg.lib = true;
+        }
+
+        if cfg.bin.is_empty() && workspace_metadata.bin.is_some() {
+            cfg.bin = workspace_metadata.bin.unwrap();
+        }
+
+        if !cfg.bins && workspace_metadata.bins.unwrap_or(false) {
+            cfg.bins = true;
+        }
+
+        if cfg.docset_name.is_none() && workspace_metadata.docset_name.is_some() {
+            cfg.docset_name = workspace_metadata.docset_name;
+        }
+
+        if cfg.docset_index.is_none() && workspace_metadata.docset_index.is_some() {
+            cfg.docset_index = workspace_metadata.docset_index;
+        }
+
+        if cfg.platform_family.is_none() && workspace_metadata.platform_family.is_some() {
+            cfg.platform_family = workspace_metadata.platform_family;
+        }
+    }
 
     // Clean the documentation directory if the user didn't explicitly ask not to clean it.
     if !cfg.no_clean {

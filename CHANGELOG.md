@@ -1,5 +1,8 @@
 # cargo-docset changelog
 
+## Unreleased - v0.4.0
+* Feature: add the ability to specify defaults for a subset of the CLI arguments in the cargo metadata for a crate.
+
 ## 9/26/2022 - v0.3.1
 
 * Bugfix: update the crate version in Cargo.lock (thanks @antifuchs)

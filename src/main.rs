@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, Args};
+use serde::Deserialize;
 
 mod commands;
 mod error;
@@ -15,6 +16,21 @@ struct Cli {
     command: Commands
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct WorkspaceMetadata {
+    pub features: Option<Vec<String>>,
+    pub no_deps: Option<bool>,
+    pub document_private_items: Option<bool>,
+    pub target: Option<String>,
+    pub lib: Option<bool>,
+    pub bin: Option<Vec<String>>,
+    pub bins: Option<bool>,
+    pub docset_name: Option<String>,
+    pub docset_index: Option<String>,
+    pub platform_family: Option<String>
+}
+
 #[derive(Args, Default, Debug, Clone)]
 /// Generate a docset. This is currently the only available command, and should remain the
 /// default one in the future if new ones are added.
@@ -24,7 +40,7 @@ pub struct DocsetParams {
     #[clap(flatten)]
     pub workspace: clap_cargo::Workspace,
     #[clap(flatten)]
-    features: clap_cargo::Features,
+    pub features: clap_cargo::Features,
     #[clap(long("no-deps"))]
     /// Do not document dependencies.
     pub no_dependencies: bool,
